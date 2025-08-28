@@ -1,6 +1,6 @@
 {
   "name": "langgraph-photo-editor",
-  "version": "1.0.0-beta.1",
+  "version": "1.0.0-beta.3",
   "description": "AI-powered photo editor with multi-agent LangGraph workflow",
   "main": "dist/main/main.js",
   "homepage": "https://github.com/pranavchavda/langgraph-photo-editor",
@@ -75,11 +75,13 @@
     },
     "files": [
       "dist/main/**/*",
-      "dist/renderer/**/*",
-      "bundled-python/**/*"
+      "dist/renderer/**/*"
     ],
     "extraResources": [
-      "bundled-python"
+      {
+        "from": "bundled-python",
+        "to": "bundled-python"
+      }
     ],
     "fileAssociations": [
       {
