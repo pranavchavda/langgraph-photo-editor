@@ -1,6 +1,6 @@
 {
   "name": "langgraph-photo-editor",
-  "version": "1.0.0-beta.3",
+  "version": "1.0.0-beta.5",
   "description": "AI-powered photo editor with multi-agent LangGraph workflow",
   "main": "dist/main/main.js",
   "homepage": "https://github.com/pranavchavda/langgraph-photo-editor",
@@ -125,8 +125,9 @@
           ]
         }
       ],
-      "hardenedRuntime": true,
-      "gatekeeperAssess": false
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "identity": null
     },
     "win": {
       "target": [
@@ -143,7 +144,9 @@
             "x64"
           ]
         }
-      ]
+      ],
+      "certificateFile": null,
+      "certificatePassword": null
     },
     "linux": {
       "category": "Graphics",
