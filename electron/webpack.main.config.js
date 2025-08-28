@@ -3,6 +3,7 @@ const path = require('path');
 module.exports = [
   // Main process
   {
+    mode: process.env.NODE_ENV || 'production',
     entry: './src/main/main.ts',
     target: 'electron-main',
     module: {
@@ -28,6 +29,7 @@ module.exports = [
   },
   // Preload process
   {
+    mode: process.env.NODE_ENV || 'production',
     entry: './src/main/preload.ts',
     target: 'electron-preload',
     module: {

@@ -3,6 +3,7 @@ const webpack = require('webpack');
 const path = require('path');
 
 module.exports = {
+  mode: process.env.NODE_ENV || 'production',
   entry: './src/renderer/index.tsx',
   target: 'electron-renderer',
   module: {

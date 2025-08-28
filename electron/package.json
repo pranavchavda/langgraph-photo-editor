@@ -111,7 +111,6 @@
     ],
     "mac": {
       "category": "public.app-category.photography",
-      "icon": "assets/icon.icns",
       "target": [
         {
           "target": "dmg",
@@ -134,7 +133,6 @@
       "entitlementsInherit": "assets/entitlements.mac.plist"
     },
     "win": {
-      "icon": "assets/icon.ico",
       "target": [
         {
           "target": "nsis",
@@ -152,7 +150,6 @@
       ]
     },
     "linux": {
-      "icon": "assets/icon.png",
       "category": "Graphics",
       "target": [
         {
