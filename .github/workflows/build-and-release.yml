@@ -87,11 +87,8 @@ jobs:
         run: npm run electron:build -- --publish=never
         working-directory: electron
         env:
-          # For macOS code signing (optional)
+          # Disable all code signing
           CSC_IDENTITY_AUTO_DISCOVERY: false
-          # For Windows code signing (optional)
-          CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
 
       - name: List build artifacts (Debug)
         run: |
