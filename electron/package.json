@@ -71,17 +71,15 @@
     "productName": "LangGraph Photo Editor",
     "copyright": "Copyright © 2025 iDrinkCoffee.com",
     "directories": {
-      "output": "dist-electron"
+      "output": "dist-electron",
+      "buildResources": "build"
     },
     "files": [
       "dist/main/**/*",
       "dist/renderer/**/*"
     ],
     "extraResources": [
-      {
-        "from": "bundled-python",
-        "to": "bundled-python"
-      }
+      "bundled-python/**/*"
     ],
     "fileAssociations": [
       {
