@@ -70,6 +70,7 @@
     "appId": "com.idrinkcoffee.langgraph-photo-editor",
     "productName": "LangGraph Photo Editor",
     "copyright": "Copyright © 2025 iDrinkCoffee.com",
+    "forceCodeSigning": false,
     "directories": {
       "output": "dist-electron",
       "buildResources": "build"
@@ -145,8 +146,11 @@
           ]
         }
       ],
+      "sign": null,
+      "signtool": null,
       "certificateFile": null,
-      "certificatePassword": null
+      "certificatePassword": null,
+      "publisherName": null
     },
     "linux": {
       "category": "Graphics",
