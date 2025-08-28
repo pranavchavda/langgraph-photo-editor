@@ -1,0 +1,97 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom scrollbar for dark theme */
+@layer base {
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-electron-surface;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-electron-border rounded;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-600;
+  }
+}
+
+/* Custom animations */
+@layer utilities {
+  .animate-pulse-gentle {
+    animation: pulse-gentle 2s ease-in-out infinite;
+  }
+
+  .animate-slide-up {
+    animation: slide-up 0.3s ease-out;
+  }
+
+  .animate-fade-in {
+    animation: fade-in 0.3s ease-out;
+  }
+}
+
+@keyframes pulse-gentle {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+@keyframes slide-up {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Agent status colors */
+.agent-analysis {
+  @apply text-agent-analysis border-agent-analysis;
+}
+
+.agent-gemini {
+  @apply text-agent-gemini border-agent-gemini;
+}
+
+.agent-imagemagick {
+  @apply text-agent-imagemagick border-agent-imagemagick;
+}
+
+.agent-background {
+  @apply text-agent-background border-agent-background;
+}
+
+.agent-qc {
+  @apply text-agent-qc border-agent-qc;
+}
+
+/* File drag and drop styles */
+.dropzone-active {
+  @apply bg-electron-accent bg-opacity-10 border-electron-accent;
+}
+
+.dropzone-reject {
+  @apply bg-red-500 bg-opacity-10 border-red-500;
+}

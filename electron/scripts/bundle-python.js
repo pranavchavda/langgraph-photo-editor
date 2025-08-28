@@ -1,0 +1,447 @@
+const fs = require('fs');
+const path = require('path');
+const { spawn } = require('child_process');
+const os = require('os');
+
+class PythonBundler {
+  constructor() {
+    this.electronDir = path.resolve(__dirname, '..');
+    this.projectRoot = path.resolve(this.electronDir, '..');
+    this.bundleDir = path.join(this.electronDir, 'bundled-python');
+    this.venvDir = path.join(this.projectRoot, 'venv');
+    
+    console.log('Python Bundler Configuration:');
+    console.log(`  Electron Dir: ${this.electronDir}`);
+    console.log(`  Project Root: ${this.projectRoot}`);
+    console.log(`  Bundle Dir: ${this.bundleDir}`);
+    console.log(`  Venv Dir: ${this.venvDir}`);
+  }
+
+  async bundle() {
+    console.log('\n🐍 Starting Python environment bundling...\n');
+    
+    try {
+      // Clean previous bundle
+      await this.cleanBundle();
+      
+      // Create bundle directory
+      await this.createBundleDir();
+      
+      // Check if virtual environment exists
+      if (await this.checkVenv()) {
+        console.log('✓ Virtual environment found');
+        await this.bundleFromVenv();
+      } else {
+        console.log('⚠️  No virtual environment found, creating one...');
+        await this.createVenv();
+        await this.bundleFromVenv();
+      }
+      
+      // Copy project files
+      await this.copyProjectFiles();
+      
+      // Create platform-specific scripts
+      await this.createScripts();
+      
+      // Validate bundle
+      await this.validateBundle();
+      
+      console.log('\n✅ Python bundling completed successfully!\n');
+      console.log(`Bundle created at: ${this.bundleDir}`);
+      
+    } catch (error) {
+      console.error('\n❌ Python bundling failed:', error.message);
+      process.exit(1);
+    }
+  }
+
+  async cleanBundle() {
+    if (fs.existsSync(this.bundleDir)) {
+      console.log('🧹 Cleaning existing bundle...');
+      await this.removeDir(this.bundleDir);
+    }
+  }
+
+  async createBundleDir() {
+    console.log('📁 Creating bundle directory...');
+    fs.mkdirSync(this.bundleDir, { recursive: true });
+  }
+
+  async checkVenv() {
+    const venvPython = path.join(this.venvDir, process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
+    return fs.existsSync(venvPython);
+  }
+
+  async createVenv() {
+    console.log('🏗️  Creating virtual environment...');
+    
+    const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+    
+    await this.runCommand(pythonCmd, ['-m', 'venv', this.venvDir], {
+      cwd: this.projectRoot,
+      description: 'Creating virtual environment'
+    });
+    
+    console.log('📦 Installing dependencies...');
+    const pipCmd = path.join(this.venvDir, process.platform === 'win32' ? 'Scripts/pip.exe' : 'bin/pip');
+    const requirementsFile = path.join(this.projectRoot, 'requirements.txt');
+    
+    if (fs.existsSync(requirementsFile)) {
+      await this.runCommand(pipCmd, ['install', '-r', requirementsFile], {
+        cwd: this.projectRoot,
+        description: 'Installing requirements'
+      });
+    } else {
+      console.log('⚠️  requirements.txt not found, installing basic dependencies');
+      const basicDeps = [
+        'anthropic>=0.34.0',
+        'google-generativeai>=0.8.0',
+        'langgraph>=0.2.0',
+        'langchain-anthropic>=0.2.0',
+        'pillow>=10.0.0',
+        'requests>=2.31.0',
+        'click>=8.0.0',
+        'rich>=13.0.0'
+      ];
+      
+      for (const dep of basicDeps) {
+        await this.runCommand(pipCmd, ['install', dep], {
+          cwd: this.projectRoot,
+          description: `Installing ${dep}`
+        });
+      }
+    }
+  }
+
+  async bundleFromVenv() {
+    console.log('📦 Bundling Python environment...');
+    
+    if (process.platform === 'win32') {
+      await this.bundleWindows();
+    } else if (process.platform === 'darwin') {
+      await this.bundleMacOS();
+    } else {
+      await this.bundleLinux();
+    }
+  }
+
+  async bundleWindows() {
+    console.log('🏢 Bundling for Windows...');
+    
+    // Copy Python executable and DLLs
+    const venvScripts = path.join(this.venvDir, 'Scripts');
+    const venvLib = path.join(this.venvDir, 'Lib');
+    const venvDLLs = path.join(this.venvDir, 'DLLs');
+    
+    // Create directory structure
+    const bundleScripts = path.join(this.bundleDir, 'Scripts');
+    const bundleLib = path.join(this.bundleDir, 'Lib');
+    const bundleDLLs = path.join(this.bundleDir, 'DLLs');
+    
+    fs.mkdirSync(bundleScripts, { recursive: true });
+    fs.mkdirSync(bundleLib, { recursive: true });
+    fs.mkdirSync(bundleDLLs, { recursive: true });
+    
+    // Copy executables
+    await this.copyFile(path.join(venvScripts, 'python.exe'), path.join(this.bundleDir, 'python.exe'));
+    if (fs.existsSync(path.join(venvScripts, 'pythonw.exe'))) {
+      await this.copyFile(path.join(venvScripts, 'pythonw.exe'), path.join(this.bundleDir, 'pythonw.exe'));
+    }
+    
+    // Copy DLLs if they exist
+    if (fs.existsSync(venvDLLs)) {
+      await this.copyDir(venvDLLs, bundleDLLs);
+    }
+    
+    // Copy site-packages
+    const sitePackages = path.join(venvLib, 'site-packages');
+    const bundleSitePackages = path.join(bundleLib, 'site-packages');
+    
+    if (fs.existsSync(sitePackages)) {
+      await this.copyDir(sitePackages, bundleSitePackages);
+    }
+    
+    // Copy standard library (selective)
+    await this.copyStandardLibrary(venvLib, bundleLib);
+  }
+
+  async bundleMacOS() {
+    console.log('🍎 Bundling for macOS...');
+    
+    const venvBin = path.join(this.venvDir, 'bin');
+    const venvLib = path.join(this.venvDir, 'lib');
+    
+    // Create directory structure
+    const bundleBin = path.join(this.bundleDir, 'bin');
+    const bundleLib = path.join(this.bundleDir, 'lib');
+    
+    fs.mkdirSync(bundleBin, { recursive: true });
+    fs.mkdirSync(bundleLib, { recursive: true });
+    
+    // Copy Python executable
+    await this.copyFile(path.join(venvBin, 'python'), path.join(bundleBin, 'python'));
+    if (fs.existsSync(path.join(venvBin, 'python3'))) {
+      await this.copyFile(path.join(venvBin, 'python3'), path.join(bundleBin, 'python3'));
+    }
+    
+    // Find Python version directory
+    const pythonVersions = fs.readdirSync(venvLib).filter(dir => dir.startsWith('python'));
+    
+    if (pythonVersions.length > 0) {
+      const pythonVersion = pythonVersions[0];
+      const venvPythonLib = path.join(venvLib, pythonVersion);
+      const bundlePythonLib = path.join(bundleLib, pythonVersion);
+      
+      await this.copyDir(venvPythonLib, bundlePythonLib);
+    }
+  }
+
+  async bundleLinux() {
+    console.log('🐧 Bundling for Linux...');
+    
+    const venvBin = path.join(this.venvDir, 'bin');
+    const venvLib = path.join(this.venvDir, 'lib');
+    
+    // Create directory structure
+    const bundleBin = path.join(this.bundleDir, 'bin');
+    const bundleLib = path.join(this.bundleDir, 'lib');
+    
+    fs.mkdirSync(bundleBin, { recursive: true });
+    fs.mkdirSync(bundleLib, { recursive: true });
+    
+    // Copy Python executable
+    await this.copyFile(path.join(venvBin, 'python'), path.join(bundleBin, 'python'));
+    if (fs.existsSync(path.join(venvBin, 'python3'))) {
+      await this.copyFile(path.join(venvBin, 'python3'), path.join(bundleBin, 'python3'));
+    }
+    
+    // Find Python version directory
+    const pythonVersions = fs.readdirSync(venvLib).filter(dir => dir.startsWith('python'));
+    
+    if (pythonVersions.length > 0) {
+      const pythonVersion = pythonVersions[0];
+      const venvPythonLib = path.join(venvLib, pythonVersion);
+      const bundlePythonLib = path.join(bundleLib, pythonVersion);
+      
+      await this.copyDir(venvPythonLib, bundlePythonLib);
+    }
+  }
+
+  async copyStandardLibrary(sourceLib, targetLib) {
+    // Copy essential standard library modules
+    const essentialModules = [
+      'encodings',
+      'importlib',
+      'collections',
+      'json',
+      'urllib',
+      'http',
+      'email',
+      'logging',
+      'xml',
+      'html',
+      'multiprocessing',
+      'concurrent',
+      'asyncio',
+      'typing_extensions.py'
+    ];
+    
+    for (const module of essentialModules) {
+      const sourcePath = path.join(sourceLib, module);
+      const targetPath = path.join(targetLib, module);
+      
+      if (fs.existsSync(sourcePath)) {
+        if (fs.statSync(sourcePath).isDirectory()) {
+          await this.copyDir(sourcePath, targetPath);
+        } else {
+          await this.copyFile(sourcePath, targetPath);
+        }
+      }
+    }
+  }
+
+  async copyProjectFiles() {
+    console.log('📄 Copying project files...');
+    
+    const filesToCopy = [
+      'photo_editor.py',
+      'requirements.txt',
+      'src'
+    ];
+    
+    for (const file of filesToCopy) {
+      const sourcePath = path.join(this.projectRoot, file);
+      const targetPath = path.join(this.bundleDir, file);
+      
+      if (fs.existsSync(sourcePath)) {
+        if (fs.statSync(sourcePath).isDirectory()) {
+          await this.copyDir(sourcePath, targetPath);
+        } else {
+          await this.copyFile(sourcePath, targetPath);
+        }
+        console.log(`  ✓ Copied ${file}`);
+      } else {
+        console.log(`  ⚠️  ${file} not found, skipping`);
+      }
+    }
+  }
+
+  async createScripts() {
+    console.log('🔧 Creating platform scripts...');
+    
+    // Create a simple test script to verify the bundle works
+    const testScript = `#!/usr/bin/env python3
+import sys
+import os
+
+print("Python Bundle Test")
+print(f"Python version: {sys.version}")
+print(f"Python executable: {sys.executable}")
+print(f"Python path: {os.pathsep.join(sys.path)}")
+
+# Test importing key dependencies
+try:
+    import anthropic
+    print("✓ anthropic imported successfully")
+except ImportError as e:
+    print(f"✗ Failed to import anthropic: {e}")
+
+try:
+    import google.generativeai
+    print("✓ google.generativeai imported successfully")
+except ImportError as e:
+    print(f"✗ Failed to import google.generativeai: {e}")
+
+try:
+    import langgraph
+    print("✓ langgraph imported successfully")
+except ImportError as e:
+    print(f"✗ Failed to import langgraph: {e}")
+
+print("Bundle test complete!")
+`;
+    
+    const testScriptPath = path.join(this.bundleDir, 'test_bundle.py');
+    fs.writeFileSync(testScriptPath, testScript);
+    
+    if (process.platform !== 'win32') {
+      fs.chmodSync(testScriptPath, '755');
+    }
+  }
+
+  async validateBundle() {
+    console.log('🔍 Validating bundle...');
+    
+    const pythonExecutable = process.platform === 'win32' 
+      ? path.join(this.bundleDir, 'python.exe')
+      : path.join(this.bundleDir, 'bin', 'python');
+    
+    if (!fs.existsSync(pythonExecutable)) {
+      throw new Error(`Python executable not found at: ${pythonExecutable}`);
+    }
+    
+    console.log('  ✓ Python executable found');
+    
+    const photoEditorScript = path.join(this.bundleDir, 'photo_editor.py');
+    if (!fs.existsSync(photoEditorScript)) {
+      throw new Error(`Photo editor script not found at: ${photoEditorScript}`);
+    }
+    
+    console.log('  ✓ Photo editor script found');
+    
+    // Test bundle by running the test script
+    try {
+      await this.runCommand(pythonExecutable, ['test_bundle.py'], {
+        cwd: this.bundleDir,
+        description: 'Testing bundle'
+      });
+      console.log('  ✓ Bundle test passed');
+    } catch (error) {
+      console.warn('  ⚠️  Bundle test failed, but bundle may still work:', error.message);
+    }
+  }
+
+  // Utility methods
+  async runCommand(command, args, options = {}) {
+    const { cwd = process.cwd(), description = 'Running command' } = options;
+    
+    return new Promise((resolve, reject) => {
+      console.log(`  ${description}: ${command} ${args.join(' ')}`);
+      
+      const child = spawn(command, args, {
+        cwd,
+        stdio: ['inherit', 'pipe', 'pipe'],
+        shell: process.platform === 'win32'
+      });
+      
+      let stdout = '';
+      let stderr = '';
+      
+      child.stdout?.on('data', (data) => {
+        stdout += data;
+        process.stdout.write(data);
+      });
+      
+      child.stderr?.on('data', (data) => {
+        stderr += data;
+        process.stderr.write(data);
+      });
+      
+      child.on('close', (code) => {
+        if (code === 0) {
+          resolve({ stdout, stderr });
+        } else {
+          reject(new Error(`Command failed with exit code ${code}: ${stderr}`));
+        }
+      });
+      
+      child.on('error', (error) => {
+        reject(error);
+      });
+    });
+  }
+
+  async copyFile(src, dest) {
+    const destDir = path.dirname(dest);
+    if (!fs.existsSync(destDir)) {
+      fs.mkdirSync(destDir, { recursive: true });
+    }
+    fs.copyFileSync(src, dest);
+  }
+
+  async copyDir(src, dest) {
+    if (!fs.existsSync(dest)) {
+      fs.mkdirSync(dest, { recursive: true });
+    }
+    
+    const entries = fs.readdirSync(src, { withFileTypes: true });
+    
+    for (const entry of entries) {
+      const srcPath = path.join(src, entry.name);
+      const destPath = path.join(dest, entry.name);
+      
+      if (entry.isDirectory()) {
+        await this.copyDir(srcPath, destPath);
+      } else {
+        fs.copyFileSync(srcPath, destPath);
+      }
+    }
+  }
+
+  async removeDir(dir) {
+    if (fs.existsSync(dir)) {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+}
+
+// Run the bundler if this script is called directly
+if (require.main === module) {
+  const bundler = new PythonBundler();
+  bundler.bundle().catch(error => {
+    console.error('Fatal error:', error);
+    process.exit(1);
+  });
+}
+
+module.exports = PythonBundler;

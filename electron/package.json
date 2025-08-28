@@ -1,0 +1,184 @@
+{
+  "name": "langgraph-photo-editor",
+  "version": "1.0.0-beta.1",
+  "description": "AI-powered photo editor with multi-agent LangGraph workflow",
+  "main": "dist/main/main.js",
+  "homepage": "https://github.com/pranavchavda/langgraph-photo-editor",
+  "author": {
+    "name": "Pranav Chavda",
+    "email": "pranav@idrinkcoffee.com"
+  },
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run build:watch\" \"npm run electron:dev\"",
+    "build": "npm run build:main && npm run build:renderer",
+    "build:main": "webpack --config webpack.main.config.js",
+    "build:renderer": "webpack --config webpack.renderer.config.js",
+    "build:watch": "concurrently \"npm run build:main -- --watch\" \"npm run build:renderer -- --watch\"",
+    "electron:dev": "wait-on dist/main/main.js dist/renderer/index.html && electron .",
+    "electron:build": "npm run build && npm run bundle-python && electron-builder",
+    "bundle-python": "node scripts/bundle-python.js",
+    "prepare-assets": "node scripts/prepare-assets.js",
+    "dist": "npm run electron:build",
+    "dist:mac": "npm run electron:build -- --mac",
+    "dist:win": "npm run electron:build -- --win",
+    "dist:linux": "npm run electron:build -- --linux",
+    "dist:all": "npm run electron:build -- --mac --win --linux",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.0.0",
+    "@types/react-dom": "^18.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "autoprefixer": "^10.4.0",
+    "concurrently": "^8.0.0",
+    "css-loader": "^6.8.0",
+    "electron": "^27.0.0",
+    "electron-builder": "^24.6.0",
+    "eslint": "^8.45.0",
+    "eslint-plugin-react": "^7.33.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "file-loader": "^6.2.0",
+    "html-webpack-plugin": "^5.5.0",
+    "postcss": "^8.4.0",
+    "postcss-loader": "^7.3.0",
+    "style-loader": "^3.3.0",
+    "tailwindcss": "^3.3.0",
+    "ts-loader": "^9.4.0",
+    "typescript": "^5.1.0",
+    "wait-on": "^7.0.0",
+    "webpack": "^5.88.0",
+    "webpack-cli": "^5.1.0",
+    "webpack-dev-server": "^4.15.0"
+  },
+  "dependencies": {
+    "@types/react-dropzone": "^4.2.2",
+    "@types/uuid": "^9.0.0",
+    "electron-store": "^8.1.0",
+    "framer-motion": "^10.16.0",
+    "lucide-react": "^0.263.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-dropzone": "^14.3.8",
+    "react-hook-form": "^7.45.0",
+    "uuid": "^9.0.0"
+  },
+  "build": {
+    "appId": "com.idrinkcoffee.langgraph-photo-editor",
+    "productName": "LangGraph Photo Editor",
+    "copyright": "Copyright © 2025 iDrinkCoffee.com",
+    "directories": {
+      "output": "dist-electron",
+      "buildResources": "assets"
+    },
+    "files": [
+      "dist/main/**/*",
+      "dist/renderer/**/*",
+      "bundled-python/**/*",
+      "assets/**/*"
+    ],
+    "extraResources": [
+      "bundled-python"
+    ],
+    "fileAssociations": [
+      {
+        "ext": "jpg",
+        "name": "JPEG Image",
+        "description": "JPEG Image File",
+        "role": "Editor"
+      },
+      {
+        "ext": "jpeg",
+        "name": "JPEG Image",
+        "description": "JPEG Image File",
+        "role": "Editor"
+      },
+      {
+        "ext": "png",
+        "name": "PNG Image",
+        "description": "PNG Image File",
+        "role": "Editor"
+      },
+      {
+        "ext": "webp",
+        "name": "WebP Image",
+        "description": "WebP Image File",
+        "role": "Editor"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.photography",
+      "icon": "assets/icon.icns",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "assets/entitlements.mac.plist",
+      "entitlementsInherit": "assets/entitlements.mac.plist"
+    },
+    "win": {
+      "icon": "assets/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "ia32"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "linux": {
+      "icon": "assets/icon.png",
+      "category": "Graphics",
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "pranavchavda",
+      "repo": "langgraph-photo-editor"
+    }
+  }
+}

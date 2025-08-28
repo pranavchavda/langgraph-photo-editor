@@ -1,0 +1,226 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build (e.g., v1.0.0)'
+        required: true
+        default: 'v1.0.0-manual'
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+        include:
+          - os: macos-latest
+            platform: mac
+            artifact_name: 'macos-build'
+          - os: windows-latest
+            platform: win
+            artifact_name: 'windows-build'
+          - os: ubuntu-latest
+            platform: linux
+            artifact_name: 'linux-build'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: electron/package-lock.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+        shell: bash
+
+      - name: Create virtual environment
+        run: |
+          python -m venv venv
+        shell: bash
+
+      - name: Activate venv and install dependencies (Linux/macOS)
+        if: matrix.os != 'windows-latest'
+        run: |
+          source venv/bin/activate
+          pip install -r requirements.txt
+        shell: bash
+
+      - name: Activate venv and install dependencies (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          venv\Scripts\activate
+          pip install -r requirements.txt
+        shell: cmd
+
+      - name: Install Node.js dependencies
+        run: npm ci
+        working-directory: electron
+
+      - name: Prepare assets
+        run: npm run prepare-assets
+        working-directory: electron
+
+      - name: Build Python bundle
+        run: npm run bundle-python
+        working-directory: electron
+
+      - name: Build Electron app
+        run: npm run electron:build -- --publish=never
+        working-directory: electron
+        env:
+          # For macOS code signing (optional)
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+          # For Windows code signing (optional)
+          CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+
+      - name: List build artifacts (Debug)
+        run: |
+          echo "Listing electron/dist-electron directory:"
+          ls -la electron/dist-electron/ || echo "dist-electron not found"
+          find electron/dist-electron -name "*.dmg" -o -name "*.exe" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.zip" || echo "No installer files found"
+        shell: bash
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: |
+            electron/dist-electron/*.dmg
+            electron/dist-electron/*.exe
+            electron/dist-electron/*.AppImage
+            electron/dist-electron/*.deb
+            electron/dist-electron/*.zip
+            electron/dist-electron/latest*.yml
+          retention-days: 30
+          if-no-files-found: warn
+
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+
+      - name: List downloaded artifacts (Debug)
+        run: |
+          echo "Downloaded artifacts:"
+          find . -name "*.dmg" -o -name "*.exe" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.zip" || echo "No installer files found"
+        shell: bash
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          
+          # Copy all installer files to release-assets
+          find . -name "*.dmg" -exec cp {} release-assets/ \;
+          find . -name "*.exe" -exec cp {} release-assets/ \;
+          find . -name "*.AppImage" -exec cp {} release-assets/ \;
+          find . -name "*.deb" -exec cp {} release-assets/ \;
+          find . -name "*.zip" -exec cp {} release-assets/ \;
+          
+          # List what we're about to release
+          echo "Release assets prepared:"
+          ls -la release-assets/
+        shell: bash
+
+      - name: Get version from tag or input
+        id: get_version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION=${GITHUB_REF#refs/tags/}
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Generate release notes
+        id: generate_notes
+        run: |
+          cat > release_notes.md << 'EOF'
+          ## LangGraph Photo Editor ${{ steps.get_version.outputs.version }}
+          
+          AI-powered photo editor with multi-agent LangGraph workflow featuring Claude Sonnet 4, Gemini 2.5 Flash, and professional image optimization.
+          
+          ### Features
+          - 🤖 **Multi-Agent AI Pipeline**: Claude analysis → Gemini editing → Background removal → ImageMagick optimization → Quality control
+          - 🎨 **Professional UI**: Modern React interface with real-time progress tracking
+          - 📱 **Cross-Platform**: Native desktop app for macOS, Windows, and Linux
+          - ⚡ **Zero Setup**: Bundled Python environment, no technical configuration required
+          - 🔧 **First-Run Wizard**: Guided API key setup for non-technical users
+          
+          ### Download Instructions
+          - **macOS**: Download `.dmg` file, drag to Applications folder
+          - **Windows**: Download `.exe` installer and run as administrator  
+          - **Linux**: Download `.AppImage` file, make executable and run
+          
+          ### System Requirements
+          - macOS 10.14+ (Intel/Apple Silicon)
+          - Windows 10+ (64-bit)
+          - Ubuntu 18.04+ or similar Linux distribution
+          
+          ### API Keys Required
+          - Anthropic API key (for Claude Sonnet 4 analysis)
+          - Google Gemini API key (for AI image editing)
+          - Remove.bg API key (optional, for background removal)
+          
+          ### Build Information
+          - Built on: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          - Commit: ${{ github.sha }}
+          - Electron: $(jq -r '.devDependencies.electron' electron/package.json)
+          - Python: 3.9+
+          EOF
+          
+          echo "Generated release notes:"
+          cat release_notes.md
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.get_version.outputs.version }}
+          name: LangGraph Photo Editor ${{ steps.get_version.outputs.version }}
+          body_path: release_notes.md
+          files: |
+            release-assets/*
+          draft: false
+          prerelease: ${{ contains(steps.get_version.outputs.version, 'beta') || contains(steps.get_version.outputs.version, 'alpha') || contains(steps.get_version.outputs.version, 'rc') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload release summary
+        run: |
+          echo "✅ Release ${{ steps.get_version.outputs.version }} created successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Release Assets:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          ls -la release-assets/ | awk '{print "- " $9 " (" $5 " bytes)"}' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔗 Links:" >> $GITHUB_STEP_SUMMARY
+          echo "- [View Release](https://github.com/${{ github.repository }}/releases/tag/${{ steps.get_version.outputs.version }})" >> $GITHUB_STEP_SUMMARY
+          echo "- [Download All Assets](https://github.com/${{ github.repository }}/releases/download/${{ steps.get_version.outputs.version }}/)" >> $GITHUB_STEP_SUMMARY

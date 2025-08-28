@@ -1,0 +1,11 @@
+#!/bin/bash
+"""
+Agentic Photo Editor - Shell Launcher
+Clean execution without Python module import warnings
+"""
+
+# Get the directory where this script is located
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+
+# Execute the Python launcher
+python "$DIR/photo_editor.py" "$@"

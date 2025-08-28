@@ -1,0 +1,7 @@
+{
+  "created": "2025-08-28T20:37:40.552Z",
+  "platform": "linux",
+  "version": "1.0.0-beta.1",
+  "electron_version": "^27.0.0",
+  "notes": "Auto-generated assets for LangGraph Photo Editor"
+}
