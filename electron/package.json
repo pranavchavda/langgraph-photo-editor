@@ -145,12 +145,7 @@
             "x64"
           ]
         }
-      ],
-      "sign": null,
-      "signtool": null,
-      "certificateFile": null,
-      "certificatePassword": null,
-      "publisherName": null
+      ]
     },
     "linux": {
       "category": "Graphics",
