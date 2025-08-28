@@ -1,280 +1,178 @@
 # 🤖 Agentic Photo Editor
 
-An AI-powered photo editing system that combines **Claude Sonnet 4 vision analysis** with **Gemini 2.5 Flash AI image editing** to automatically optimize product photography for e-commerce. Perfect for iDrinkCoffee.com's espresso machines, coffee equipment, and product photography needs.
+A desktop application that transforms your photos with AI-powered intelligent editing using a 5-agent pipeline powered by **Claude Sonnet 4** and **Gemini 2.5 Flash**.
+
+![Build Status](https://github.com/pranavchavda/langgraph-photo-editor/workflows/Build%20Test/badge.svg)
 
 ## ✨ Features
 
-- **🔍 Intelligent Analysis**: Claude Sonnet 4 vision analyzes each image for optimal processing strategy
-- **🤖 AI Image Editing**: Gemini 2.5 Flash performs complex image modifications using natural language instructions
-- **🎨 Smart Background Removal**: remove.bg integration with format preservation 
-- **⚡ Custom Optimizations**: ImageMagick adjustments based on AI analysis (brightness, contrast, saturation, gamma)
-- **✅ Quality Control**: AI validates results and triggers automatic retries with refinements
-- **📊 Real-time Streaming**: Live progress updates with rich terminal UI
-- **🔄 Retry Logic**: Failed QC automatically refines parameters and retries (up to 2 attempts)
-- **🚀 Concurrent Processing**: Batch process multiple images with configurable concurrency
-
-## 🏗️ Architecture
-
-**Multi-Agent LangGraph Workflow:**
-
-1. **Enhanced Analysis Agent** 🔍 - Claude Sonnet 4 vision analysis determines optimal processing strategy:
-   - **Gemini Strategy**: Complex edits requiring AI understanding (chrome enhancement, artistic adjustments)
-   - **ImageMagick Strategy**: Simple parameter adjustments (brightness, contrast, saturation)
-2. **Gemini Agent** 🤖 - Gemini 2.5 Flash performs AI image editing with natural language instructions
-3. **Background Agent** 🎨 - remove.bg API removes backgrounds (WebP output for transparency)
-4. **Optimization Agent** ⚡ - Applies custom ImageMagick commands based on analysis
-5. **QC Agent** ✅ - Claude evaluates results and provides feedback for retries
-
-**Modern LangGraph Implementation:**
-- `@task` decorators for individual agents
-- `@entrypoint` orchestrator with checkpointing
-- `StreamWriter` for real-time progress updates
-- `InMemorySaver` for state persistence across retries
+- **🔍 5-Agent AI Pipeline**: Claude analysis → Gemini editing → ImageMagick → Background removal → Quality control
+- **🖥️ Cross-Platform Desktop**: Native apps for macOS, Windows, and Linux with beautiful UI
+- **🧙‍♂️ Setup Wizard**: First-run guided setup for non-technical users
+- **🎨 Drag & Drop Interface**: Professional file handling with real-time progress tracking
+- **📊 Quality Control**: Automated validation with retry logic and quality scoring
+- **⚡ Batch Processing**: Concurrent processing with configurable limits
+- **🎯 Custom Instructions**: Natural language editing commands
 
 ## 🚀 Quick Start
 
-### For macOS Users (Doug!)
+### 📥 Download Installers (Recommended)
 
-👉 **See [macOS Setup Guide](docs/MACOS_SETUP.md)** for complete installation instructions.
+**For non-technical users - just download and install:**
 
-### Already Set Up? 
+Visit the [**Releases**](../../releases) page and download the installer for your platform:
+
+- 🍎 **macOS**: `Agentic Photo Editor-x.x.x.dmg` (drag to Applications)
+- 🪟 **Windows**: `Agentic Photo Editor Setup x.x.x.exe` (run installer)  
+- 🐧 **Linux**: `Agentic Photo Editor-x.x.x.AppImage` (make executable and run)
+
+**What you get:**
+- 🎨 Professional drag-and-drop interface
+- 🧙‍♂️ First-run setup wizard for API keys
+- 📊 Real-time progress tracking
+- 🚀 Zero technical setup required
+
+### 🛠️ Build from Source
+
+**For developers:**
 
 ```bash
-# Interactive chat mode (easiest!)
+git clone https://github.com/pranavchavda/langgraph-photo-editor.git
+cd langgraph-photo-editor
+
+# Setup Python environment
+python -m venv venv
+source venv/bin/activate  # Linux/macOS
+pip install -r requirements.txt
+
+# Setup Electron desktop app
+cd electron
+npm install
+npm run dev  # Development mode
+npm run dist:all  # Build installers
+```
+
+### 💻 Command Line Interface
+
+```bash
+# Interactive chat mode (natural language)
 python photo_editor.py chat
 
-# Process single image with custom instructions
+# Process single image
 python photo_editor.py process image.jpg --instructions "enhance chrome and make more vibrant"
 
-# Process directory  
+# Batch process directory  
 python photo_editor.py batch ./product-photos/
 ```
 
-## 📚 Complete Documentation
-
-- **[🚀 Quick Reference](docs/QUICK_REFERENCE.md)** - Essential commands and tips
-- **[📱 macOS Setup Guide](docs/MACOS_SETUP.md)** - Complete installation for Mac users  
-- **[📖 User Guide](docs/USER_GUIDE.md)** - How to use the photo editor
-- **[❓ FAQ](docs/FAQ.md)** - Common questions and troubleshooting
-- **[⚙️ Advanced Usage](docs/ADVANCED.md)** - Power user features and customization
-- **[🔧 Troubleshooting](docs/TROUBLESHOOTING.md)** - Fix common issues
-
-## 📋 CLI Commands
-
-### 🆕 `chat` - Interactive Chat Mode (NEW!)
-```bash
-python photo_editor.py chat
-```
-
-**Natural language photo processing instructions!** Chat directly with the AI system:
-
-```
-🤖 Your instruction: Process ../luce-images/ with brighter colors and more vibrant look
-
-🎯 Understood:
-   📁 Target: ../luce-images/
-   📝 Instructions: brighter colors and more vibrant look  
-   ⚙️  Processing mode: batch
-
-Proceed with processing? [y/n]: y
-```
-
-**Chat Examples:**
-- `"Process /path/to/images/ with brighter colors and sharper details"`
-- `"Make the coffee machines in ./luce-images/ more vibrant"`
-- `"Process image.jpg but keep it more natural, less saturated"`
-- `"Apply chrome optimization to all steel machines in folder/"`
-
-**Features:**
-- 🧠 **Intelligent parsing** - Claude understands your instructions
-- 📁 **Smart file detection** - Automatically detects files vs directories  
-- 🎨 **Custom optimization** - Adjusts analysis based on your style preferences
-- ✅ **Confirmation** - Shows what was understood before processing
-
-### `process` - Single Image Processing
-```bash
-python photo_editor.py process IMAGE_PATH [--instructions "custom instructions"] [--output-dir DIR]
-```
-
-- Processes one image with live progress display
-- Shows real-time agent status and quality scores
-- Automatic retry with QC refinements
-
-### `batch` - Batch Processing  
-```bash
-python photo_editor.py batch INPUT_DIR [OPTIONS]
-```
-
-Options:
-- `--output-dir DIR` - Output directory for processed images
-- `--max-concurrent N` - Max concurrent processing (default: 3)
-- `--pattern GLOB` - File pattern to match (default: `*.{jpg,jpeg,png,webp}`)
-
-### `test` - Configuration Test
-```bash
-python photo_editor.py test
-```
-
-Validates:
-- API key configuration
-- ImageMagick availability  
-- System readiness
-
-## 🔧 Configuration
-
-### API Keys (Required)
-- **ANTHROPIC_API_KEY** - Claude Sonnet 4 vision analysis and QC
-- **GEMINI_API_KEY** - Gemini 2.5 Flash AI image editing (get from: https://makersuite.google.com/app/apikey)
-- **REMOVE_BG_API_KEY** - Background removal (optional, will skip if missing)
-
-### Processing Settings
-- **MAX_CONCURRENT_IMAGES** - Batch processing concurrency (default: 3)
-- **RETRY_ATTEMPTS** - QC retry attempts (default: 2)
-- **QUALITY_THRESHOLD** - Minimum QC score for pass (default: 0.8)
-
 ## 🎯 How It Works
 
-### 1. Enhanced Analysis Phase 🔍
-Claude Sonnet 4 analyzes the image and determines the optimal processing strategy:
+### The 5-Agent Workflow
+
+1. **🔍 Analysis Agent** (Claude Sonnet 4) - Analyzes image and determines optimal processing strategy
+2. **🤖 Gemini Edit Agent** (Gemini 2.5 Flash) - Performs AI-powered image editing with natural language  
+3. **⚡ ImageMagick Agent** - Traditional photo optimizations as fallback
+4. **🎨 Background Agent** - Professional background removal when needed
+5. **✅ Quality Control Agent** (Claude) - Validates results and triggers retries
+
+### Processing Strategies
 
 **Gemini Strategy** 🤖 - For complex edits requiring AI understanding:
 - Chrome/metal surface enhancement with natural reflections
 - Artistic color adjustments and vibrance improvements  
 - Complex lighting corrections and shadow management
-- Detail enhancement while maintaining natural appearance
 
 **ImageMagick Strategy** ⚡ - For simple parameter adjustments:
 - Basic brightness, contrast, saturation adjustments
-- Simple gamma corrections
-- Standard color cast removal
+- Simple gamma corrections and color cast removal
 
-The analysis examines:
-- Surface materials (chrome, stainless steel, matte, glass)
-- Lighting quality and shadow issues
-- Color accuracy and vibrance needs
-- Complex vs simple editing requirements
+## 🔧 Setup & Configuration
 
-### 2. AI Image Editing Phase 🤖 (Gemini Strategy)
-When complex editing is needed, Gemini 2.5 Flash performs:
-- **Natural language instructions** - Processes custom user instructions like "enhance chrome" or "make more vibrant"
-- **Intelligent modifications** - Understands surface materials and applies appropriate enhancements
-- **Quality preservation** - Maintains image quality while making sophisticated adjustments
-- **Context awareness** - Considers the product type and desired commercial appearance
+### API Keys Required
 
-### 3. Background Removal 🎨
-- Uses remove.bg API for professional background removal
-- Always outputs WebP format for transparency support
-- Handles rate limiting and error recovery
+The app needs these API keys (configured through the setup wizard):
 
-### 4. Optimization Phase ⚡ (ImageMagick Strategy)
-For simpler adjustments, applies ImageMagick commands based on analysis:
-- **Brightness/Contrast** adjustments for exposure correction
-- **Saturation** enhancement for product vibrancy
-- **Gamma** correction for tonal balance
-- **Chrome/Steel** specific processing for reflective surfaces
-- **Single-frame** output to prevent animated WebP issues
+- **🧠 Claude (Anthropic)**: Get from [console.anthropic.com](https://console.anthropic.com/)
+- **✨ Gemini**: Get from [makersuite.google.com](https://makersuite.google.com/app/apikey)  
+- **🎨 Remove.bg** (optional): Get from [remove.bg/api](https://www.remove.bg/api)
 
-### 5. Quality Control ✅
-Claude evaluates the processed image:
-- **Professional appearance** - Clean, commercial quality
-- **Color accuracy** - Natural, not oversaturated  
-- **Lighting quality** - Even, no harsh shadows
-- **Detail preservation** - Sharp product features
-- **Background quality** - Clean transparency
+### First-Time Setup
 
-**QC Scoring:** 0-10 scale where 8+ passes, <8 triggers retry with refinements.
+1. **Launch the app** - Setup wizard appears automatically
+2. **Enter API keys** - Real-time validation with help links
+3. **Configure settings** - Quality threshold, retry attempts, etc.
+4. **Start processing** - Drag & drop images to begin!
 
-## 📊 Progress Display
+## 🏗️ Architecture
 
-Rich terminal UI shows:
-- **Real-time agent status** with emoji indicators
-- **Quality scores** from QC analysis
-- **Retry attempts** and refinement details
-- **Error tracking** with detailed messages
-- **Batch progress** with success rates
+- **Frontend**: React + TypeScript + Tailwind CSS with Electron
+- **Backend**: Python with LangGraph workflow orchestration  
+- **AI Services**: Claude Sonnet 4, Gemini 2.5 Flash, Remove.bg
+- **Build System**: Webpack + electron-builder for cross-platform distribution
+- **Deployment**: GitHub Actions automated builds for all platforms
 
-## 🔄 Retry Logic
+## 🚀 Automated Builds
 
-When QC fails (score < 8):
-1. **Analyze issues** - QC agent identifies specific problems
-2. **Refine parameters** - Adjust brightness, contrast, saturation, gamma
-3. **Retry processing** - Re-run optimization with refined settings
-4. **Max attempts** - Up to 2 retries, then return best attempt
+This repository uses GitHub Actions to automatically build installers for all platforms:
 
-## 🎨 Input/Output Formats
+- **🏷️ Tagged Releases**: Create a git tag like `v1.0.0` to trigger release builds
+- **🔄 Pull Requests**: Automatically test builds on all platforms  
+- **📦 Artifacts**: Download build artifacts from GitHub Actions runs
+- **🎯 Manual Triggers**: Use "Actions" tab to manually trigger builds
 
-**Supported Inputs:**
-- JPG/JPEG - Standard photo format
-- PNG - With alpha channel support
-- WebP - Modern web format
+### Creating a Release
 
-**Outputs:**
-- **Always WebP** - Preserves transparency from background removal
-- **High quality** - Optimized compression settings
-- **Single frame** - Prevents animated WebP issues
+```bash
+# Tag a new version
+git tag v1.0.0
+git push origin v1.0.0
 
-## 🔧 Dependencies
+# GitHub Actions will automatically:
+# 1. Build installers for macOS, Windows, Linux
+# 2. Create a new GitHub release
+# 3. Upload all installers as release assets
+```
 
-**Core:**
-- `langgraph` - Multi-agent workflow orchestration
-- `langchain-anthropic` - Claude vision integration
-- `anthropic` - Direct Claude API access
-- `google.generativeai` - Gemini 2.5 Flash AI image editing
-- `requests` - remove.bg API calls
+## 🎨 Input/Output
 
-**CLI & Display:**
-- `click` - Command line interface
-- `rich` - Beautiful terminal UI and progress display
-- `pillow` - Image format handling
+**Supported Formats:**
+- 📥 **Input**: JPG, JPEG, PNG, WebP
+- 📤 **Output**: WebP (preserves transparency from background removal)
 
-**Processing:**
-- `imagemagick` - System dependency for image optimization
+**File Naming:**
+- `original-name-enhanced.webp` - Successfully processed
+- `original-name-q8.webp` - Quality score of 8/10
+- `original-name-qfail.webp` - Failed quality check
 
-## 🚀 Performance
+## 📊 Performance
 
-**Concurrent Processing:**
-- Default: 3 concurrent images
-- Configurable via `--max-concurrent`
-- Memory-efficient streaming
-
-**Processing Speed:**
-- ~30-90 seconds per image (depending on complexity and strategy)
-- Background removal: ~5-15 seconds
-- Claude analysis: ~10-20 seconds  
-- Gemini AI editing: ~20-40 seconds (complex edits)
-- ImageMagick optimization: ~5-10 seconds (simple adjustments)
-
-## 🏆 Quality Results
-
-Based on iDrinkCoffee.com product photography:
-
-**Successful Optimizations:**
-- Chrome espresso machines: Gemini-enhanced reflections, reduced overexposure, natural detail enhancement
-- Coffee equipment: AI-powered color accuracy, intelligent shadow removal
-- Product shots: Professional background removal, context-aware vibrance enhancement
-- Custom instructions: Natural language processing for specific enhancement requests
-
-**Quality Improvements:**
-- 85%+ images pass QC on first attempt
-- 95%+ images pass after 1-2 retries
-- Consistent professional results across batch processing
+- **Processing Time**: ~30-90 seconds per image (depending on complexity)
+- **Batch Processing**: 3 concurrent images (configurable)
+- **Quality Pass Rate**: 85%+ pass on first attempt, 95%+ after retries
+- **File Size**: ~108MB installed app
 
 ## 🔮 Future Enhancements
 
-**Phase 2 - Web Interface:**
-- FastAPI backend with same LangGraph workflow
-- React frontend with real-time WebSocket progress
-- Drag-and-drop batch upload
-- Result galleries and comparisons
+- **🌐 Web Interface**: FastAPI backend with React frontend
+- **🎨 Style Presets**: Custom presets for different product categories  
+- **🛒 E-commerce Integration**: Direct integration with Shopify, etc.
+- **📈 Analytics Dashboard**: Processing metrics and quality reporting
 
-**Advanced Features:**
-- Custom style presets for different product categories
-- Integration with product catalogs (Shopify, etc.)
-- Automated watermarking and branding
-- Advanced QC metrics and reporting
+## 📚 Documentation
+
+- **[🎯 User Guide](electron/USER_GUIDE.md)**: Complete end-user documentation with installation guides
+- **[🔧 Build Guide](electron/BUILD_GUIDE.md)**: Technical documentation for developers and building  
+- **[💻 Development Guide](CLAUDE.md)**: Project setup and development workflow
 
 ## 🤝 Contributing
 
-This project follows the plan outlined in `plan.md` - CLI-first with agentic intelligence, designed for later web interface expansion.
+This project follows modern LangGraph patterns with functional API decorators. See the development documentation for setup instructions.
 
-Built with modern LangGraph functional API patterns for maintainable, scalable AI workflows.
+## 📄 License
+
+MIT License - see LICENSE file for details.
+
+---
+
+**🤖 Built with Claude Code and modern AI workflows**  
+**⭐ Star this repo if you find it useful!**
