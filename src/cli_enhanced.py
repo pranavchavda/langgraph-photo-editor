@@ -266,14 +266,70 @@ async def process_single_with_enhanced_progress(
                 
                 # Handle output directory
                 if output_dir and result.get("final_image"):
+                    print(f"🔍 DEBUG: Output dir specified: {output_dir}")
+                    print(f"🔍 DEBUG: Result final_image path: {result['final_image']}")
                     output_path = Path(output_dir) / Path(result["final_image"]).name
+                    print(f"🔍 DEBUG: Target output path: {output_path}")
                     output_path.parent.mkdir(parents=True, exist_ok=True)
+                    print(f"🔍 DEBUG: Created output directory: {output_path.parent}")
                     import shutil
-                    shutil.move(result["final_image"], str(output_path))
-                    result["final_image"] = str(output_path)
+                    if Path(result["final_image"]).exists():
+                        print(f"🔍 DEBUG: Final image exists at {result['final_image']}, moving to {output_path}")
+                        shutil.move(result["final_image"], str(output_path))
+                        result["final_image"] = str(output_path)
+                        print(f"🔍 DEBUG: Successfully moved file to {output_path}")
+                        print(f"🔍 DEBUG: File exists at destination: {output_path.exists()}")
+                    else:
+                        print(f"⚠️ Warning: Final image not found at {result['final_image']}")
+                        print(f"🔍 DEBUG: Checking temp directory /tmp/agentic-photo-editor-temp/")
+                        # Check if file exists in temp directory and copy it
+                        temp_files = list(Path("/tmp/agentic-photo-editor-temp").glob("*.webp"))
+                        print(f"🔍 DEBUG: Found {len(temp_files)} webp files in temp: {[str(f) for f in temp_files]}")
+                        if temp_files:
+                            latest_file = max(temp_files, key=lambda p: p.stat().st_mtime)
+                            print(f"📁 Found recent file in temp directory: {latest_file}")
+                            print(f"🔍 DEBUG: Copying {latest_file} to {output_path}")
+                            shutil.copy2(latest_file, str(output_path))
+                            result["final_image"] = str(output_path)
+                            print(f"🔍 DEBUG: Successfully copied file to {output_path}")
+                            print(f"🔍 DEBUG: File exists at destination: {output_path.exists()}")
+                        else:
+                            print(f"🔍 DEBUG: No webp files found in temp directory")
             else:
                 # Use original workflow
                 result = await process_single_image_with_progress(image_path)
+                
+                # Handle output dir for classic workflow
+                if output_dir and result.get("final_image"):
+                    print(f"🔍 DEBUG (Classic): Output dir specified: {output_dir}")
+                    print(f"🔍 DEBUG (Classic): Result final_image path: {result['final_image']}")
+                    output_path = Path(output_dir) / Path(result["final_image"]).name
+                    print(f"🔍 DEBUG (Classic): Target output path: {output_path}")
+                    output_path.parent.mkdir(parents=True, exist_ok=True)
+                    print(f"🔍 DEBUG (Classic): Created output directory: {output_path.parent}")
+                    import shutil
+                    if Path(result["final_image"]).exists():
+                        print(f"🔍 DEBUG (Classic): Final image exists at {result['final_image']}, moving to {output_path}")
+                        shutil.move(result["final_image"], str(output_path))
+                        result["final_image"] = str(output_path)
+                        print(f"🔍 DEBUG (Classic): Successfully moved file to {output_path}")
+                        print(f"🔍 DEBUG (Classic): File exists at destination: {output_path.exists()}")
+                    else:
+                        print(f"⚠️ Warning: Final image not found at {result['final_image']}")
+                        print(f"🔍 DEBUG (Classic): Checking temp directory /tmp/agentic-photo-editor-temp/")
+                        # Check if file exists in temp directory and copy it
+                        temp_files = list(Path("/tmp/agentic-photo-editor-temp").glob("*.webp"))
+                        print(f"🔍 DEBUG (Classic): Found {len(temp_files)} webp files in temp: {[str(f) for f in temp_files]}")
+                        if temp_files:
+                            latest_file = max(temp_files, key=lambda p: p.stat().st_mtime)
+                            print(f"📁 Found recent file in temp directory: {latest_file}")
+                            print(f"🔍 DEBUG (Classic): Copying {latest_file} to {output_path}")
+                            shutil.copy2(latest_file, str(output_path))
+                            result["final_image"] = str(output_path)
+                            print(f"🔍 DEBUG (Classic): Successfully copied file to {output_path}")
+                            print(f"🔍 DEBUG (Classic): File exists at destination: {output_path.exists()}")
+                        else:
+                            print(f"🔍 DEBUG (Classic): No webp files found in temp directory")
             
             # Final update
             if result.get("qc_passed", False):
@@ -685,7 +741,8 @@ async def execute_enhanced_chat_instruction(instruction: Dict[str, Any], use_enh
                     if use_enhanced:
                         console.print(f"🎯 Strategy: {result.get('editing_strategy', 'unknown')}")
                 else:
-                    console.print(f"⚠️ Quality issues detected", style="yellow")
+                    quality_score = result.get('quality_score', 0)
+                    console.print(f"⚠️ Quality: {quality_score}/10 (issues detected)", style="yellow")
         
     except Exception as e:
         console.print(f"❌ Processing failed: {e}", style="red")

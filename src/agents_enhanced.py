@@ -268,6 +268,8 @@ async def gemini_edit_agent(image_path: str, analysis: Dict[str, Any]) -> str:
         ])
         
         print("DEBUG: Received response from Gemini")
+        print(f"DEBUG: Response type: {type(response)}")
+        print(f"DEBUG: Response candidates: {len(response.candidates) if response.candidates else 0}")
         
         # Save edited image in same folder as original
         output_path = str(Path(image_path).parent / f"{Path(image_path).stem}-gemini-edited.webp")
@@ -279,8 +281,14 @@ async def gemini_edit_agent(image_path: str, analysis: Dict[str, Any]) -> str:
         
         if response.candidates and len(response.candidates) > 0:
             candidate = response.candidates[0]
+            print(f"DEBUG: Candidate content: {candidate.content}")
+            print(f"DEBUG: Candidate parts: {len(candidate.content.parts) if candidate.content and candidate.content.parts else 0}")
             if candidate.content and candidate.content.parts:
-                for part in candidate.content.parts:
+                for i, part in enumerate(candidate.content.parts):
+                    print(f"DEBUG: Part {i} type: {type(part)}")
+                    print(f"DEBUG: Part {i} has inline_data: {hasattr(part, 'inline_data')}")
+                    if hasattr(part, 'text'):
+                        print(f"DEBUG: Part {i} text: {part.text[:200]}..." if len(str(part.text)) > 200 else f"DEBUG: Part {i} text: {part.text}")
                     if hasattr(part, 'inline_data') and part.inline_data:
                         print(f"✅ Found edited image data ({part.inline_data.mime_type}, {len(part.inline_data.data)} bytes)")
                         try:
@@ -318,6 +326,7 @@ async def gemini_edit_agent(image_path: str, analysis: Dict[str, Any]) -> str:
         
         if not image_saved:
             print("❌ No edited image found in Gemini response")
+            print(f"DEBUG: Full response structure: {response}")
             raise AgentError("No edited image received from Gemini")
         
         # No transparency restoration needed - background removal happens after Gemini editing

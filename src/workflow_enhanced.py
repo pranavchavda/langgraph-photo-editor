@@ -249,7 +249,10 @@ async def enhanced_agentic_processor(
         # 🔄 Stage 6: ImageMagick Fallback Decision
         final_image_path = current_image
         
-        if qc_result.get("needs_imagemagick_fallback", False) and not imagemagick_optimized_path:
+        # Skip ImageMagick fallback if Gemini was specifically chosen and used
+        if (qc_result.get("needs_imagemagick_fallback", False) and 
+            not imagemagick_optimized_path and 
+            editing_strategy != "gemini"):
             writer({
                 "stage": "imagemagick_fallback",
                 "message": "QC recommends ImageMagick fallback - applying additional optimization"
@@ -433,8 +436,18 @@ async def process_single_image_enhanced(
         
         # Move processed file
         import shutil
-        shutil.move(result["final_image"], str(output_path))
-        result["final_image"] = str(output_path)
+        if Path(result["final_image"]).exists():
+            shutil.move(result["final_image"], str(output_path))
+            result["final_image"] = str(output_path)
+        else:
+            print(f"⚠️ Warning: Final image not found at {result['final_image']}")
+            # Check if file exists in temp directory and copy it
+            temp_files = list(Path("/tmp/agentic-photo-editor-temp").glob("*.webp"))
+            if temp_files:
+                latest_file = max(temp_files, key=lambda p: p.stat().st_mtime)
+                print(f"📁 Found recent file in temp directory: {latest_file}")
+                shutil.copy2(latest_file, str(output_path))
+                result["final_image"] = str(output_path)
     
     return result
 

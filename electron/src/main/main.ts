@@ -440,10 +440,17 @@ class PhotoEditorMain {
           // Find the output file if processing succeeded
           if (code === 0 && job.outputPath) {
             try {
-              const files = fs.readdirSync(job.outputPath);
-              const imageFiles = files.filter(f => /\.(jpg|jpeg|png|webp)$/i.test(f));
-              if (imageFiles.length > 0) {
-                job.outputPath = path.join(job.outputPath, imageFiles[0]);
+              // Check if outputPath is already a file
+              if (fs.statSync(job.outputPath).isFile()) {
+                // Already pointing to the file, no need to scan directory
+                console.log('Output path is already a file:', job.outputPath);
+              } else {
+                // It's a directory, scan for image files
+                const files = fs.readdirSync(job.outputPath);
+                const imageFiles = files.filter(f => /\.(jpg|jpeg|png|webp)$/i.test(f));
+                if (imageFiles.length > 0) {
+                  job.outputPath = path.join(job.outputPath, imageFiles[0]);
+                }
               }
             } catch (error) {
               console.error('Failed to find output file:', error);
