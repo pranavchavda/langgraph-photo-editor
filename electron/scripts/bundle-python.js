@@ -215,6 +215,50 @@ class PythonBundler {
       await this.copyFile(path.join(venvBin, 'python3'), path.join(bundleBin, 'python3'));
     }
     
+    // Find and copy Python shared libraries
+    try {
+      const result = await this.runCommand('ldd', [path.join(venvBin, 'python')], {
+        capture: true,
+        description: 'Finding Python shared libraries'
+      });
+      
+      // Parse ldd output to find libpython
+      const lddLines = result.stdout.split('\n');
+      for (const line of lddLines) {
+        if (line.includes('libpython')) {
+          const match = line.match(/=>\s+([^\s]+)/);
+          if (match && match[1] && fs.existsSync(match[1])) {
+            const libName = path.basename(match[1]);
+            await this.copyFile(match[1], path.join(bundleLib, libName));
+            console.log(`  ✓ Copied shared library: ${libName}`);
+          }
+        }
+      }
+    } catch (error) {
+      console.log('  ⚠️  Could not copy shared libraries, trying alternative approach...');
+      
+      // Alternative: copy from system Python installation
+      const systemPythonPaths = [
+        '/usr/lib/x86_64-linux-gnu',
+        '/usr/lib64',
+        '/usr/lib',
+        '/lib/x86_64-linux-gnu',
+        '/lib64',
+        '/lib'
+      ];
+      
+      for (const libPath of systemPythonPaths) {
+        const libFiles = ['libpython3.9.so.1.0', 'libpython3.9.so', 'libpython3.so'];
+        for (const libFile of libFiles) {
+          const sourcePath = path.join(libPath, libFile);
+          if (fs.existsSync(sourcePath)) {
+            await this.copyFile(sourcePath, path.join(bundleLib, libFile));
+            console.log(`  ✓ Copied system library: ${libFile}`);
+          }
+        }
+      }
+    }
+    
     // Find Python version directory
     const pythonVersions = fs.readdirSync(venvLib).filter(dir => dir.startsWith('python'));
     
@@ -288,6 +332,22 @@ class PythonBundler {
 
   async createScripts() {
     console.log('🔧 Creating platform scripts...');
+    
+    // Create platform-specific startup script for Linux
+    if (process.platform === 'linux') {
+      const startupScript = `#!/bin/bash
+# Python bundle startup script for Linux
+BUNDLE_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
+export LD_LIBRARY_PATH="\${BUNDLE_DIR}/lib:\${LD_LIBRARY_PATH}"
+export PYTHONPATH="\${BUNDLE_DIR}/lib/python3.9/site-packages:\${PYTHONPATH}"
+exec "\${BUNDLE_DIR}/bin/python" "\$@"
+`;
+      
+      const startupScriptPath = path.join(this.bundleDir, 'python-wrapper.sh');
+      fs.writeFileSync(startupScriptPath, startupScript);
+      fs.chmodSync(startupScriptPath, '755');
+      console.log('  ✓ Created Linux startup script');
+    }
     
     // Create a simple test script to verify the bundle works
     const testScript = `#!/usr/bin/env python3
@@ -363,7 +423,7 @@ print("Bundle test complete!")
 
   // Utility methods
   async runCommand(command, args, options = {}) {
-    const { cwd = process.cwd(), description = 'Running command' } = options;
+    const { cwd = process.cwd(), description = 'Running command', capture = false } = options;
     
     return new Promise((resolve, reject) => {
       console.log(`  ${description}: ${command} ${args.join(' ')}`);
@@ -379,12 +439,16 @@ print("Bundle test complete!")
       
       child.stdout?.on('data', (data) => {
         stdout += data;
-        process.stdout.write(data);
+        if (!capture) {
+          process.stdout.write(data);
+        }
       });
       
       child.stderr?.on('data', (data) => {
         stderr += data;
-        process.stderr.write(data);
+        if (!capture) {
+          process.stderr.write(data);
+        }
       });
       
       child.on('close', (code) => {

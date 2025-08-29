@@ -85,7 +85,16 @@ class PhotoEditorMain {
           if (!fs.existsSync(this.pythonExecutable)) {
             this.pythonExecutable = path.join(bundledPythonPath, 'Scripts', 'python.exe');
           }
+        } else if (process.platform === 'linux') {
+          // On Linux, prefer the wrapper script that sets LD_LIBRARY_PATH
+          const wrapperScript = path.join(bundledPythonPath, 'python-wrapper.sh');
+          if (fs.existsSync(wrapperScript)) {
+            this.pythonExecutable = wrapperScript;
+          } else {
+            this.pythonExecutable = path.join(bundledPythonPath, 'bin', 'python');
+          }
         } else {
+          // macOS
           this.pythonExecutable = path.join(bundledPythonPath, 'bin', 'python');
           // Fallback to python3
           if (!fs.existsSync(this.pythonExecutable)) {
