@@ -268,6 +268,37 @@ class PythonBundler {
       const bundlePythonLib = path.join(bundleLib, pythonVersion);
       
       await this.copyDir(venvPythonLib, bundlePythonLib);
+      
+      // Fix namespace packages for Linux
+      await this.fixNamespacePackages(bundlePythonLib);
+    }
+  }
+
+  async fixNamespacePackages(pythonLibPath) {
+    console.log('🔧 Fixing namespace packages...');
+    
+    const sitePackagesPath = path.join(pythonLibPath, 'site-packages');
+    if (!fs.existsSync(sitePackagesPath)) {
+      return;
+    }
+    
+    // Known namespace packages that need __init__.py files
+    const namespacePackages = [
+      'google'
+    ];
+    
+    for (const pkg of namespacePackages) {
+      const pkgPath = path.join(sitePackagesPath, pkg);
+      const initFile = path.join(pkgPath, '__init__.py');
+      
+      if (fs.existsSync(pkgPath) && !fs.existsSync(initFile)) {
+        console.log(`  ✓ Creating __init__.py for ${pkg} namespace package`);
+        const initContent = `# ${pkg} namespace package
+# This ensures that ${pkg}.* submodules can be imported correctly
+__path__ = __import__('pkgutil').extend_path(__path__, __name__)`;
+        
+        fs.writeFileSync(initFile, initContent);
+      }
     }
   }
 
@@ -335,18 +366,22 @@ class PythonBundler {
     
     // Create platform-specific startup script for Linux
     if (process.platform === 'linux') {
+      // Find the Python version dynamically
+      const pythonVersions = fs.readdirSync(path.join(this.bundleDir, 'lib')).filter(dir => dir.startsWith('python'));
+      const pythonVersion = pythonVersions.length > 0 ? pythonVersions[0] : 'python3.13';
+      
       const startupScript = `#!/bin/bash
 # Python bundle startup script for Linux
 BUNDLE_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
 export LD_LIBRARY_PATH="\${BUNDLE_DIR}/lib:\${LD_LIBRARY_PATH}"
-export PYTHONPATH="\${BUNDLE_DIR}/lib/python3.9/site-packages:\${PYTHONPATH}"
+export PYTHONPATH="\${BUNDLE_DIR}/lib/${pythonVersion}/site-packages:\${PYTHONPATH}"
 exec "\${BUNDLE_DIR}/bin/python" "\$@"
 `;
       
       const startupScriptPath = path.join(this.bundleDir, 'python-wrapper.sh');
       fs.writeFileSync(startupScriptPath, startupScript);
       fs.chmodSync(startupScriptPath, '755');
-      console.log('  ✓ Created Linux startup script');
+      console.log(`  ✓ Created Linux startup script with ${pythonVersion}`);
     }
     
     // Create a simple test script to verify the bundle works
