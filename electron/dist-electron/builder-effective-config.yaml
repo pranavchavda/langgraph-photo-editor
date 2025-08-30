@@ -1,0 +1,70 @@
+directories:
+  output: dist-electron
+  buildResources: build
+appId: com.idrinkcoffee.langgraph-photo-editor
+productName: LangGraph Photo Editor
+copyright: Copyright © 2025 iDrinkCoffee.com
+forceCodeSigning: false
+files:
+  - filter:
+      - dist/main/**/*
+      - dist/renderer/**/*
+extraResources:
+  - filter:
+      - bundled-python/**/*
+fileAssociations:
+  - ext: jpg
+    name: JPEG Image
+    description: JPEG Image File
+    role: Editor
+  - ext: jpeg
+    name: JPEG Image
+    description: JPEG Image File
+    role: Editor
+  - ext: png
+    name: PNG Image
+    description: PNG Image File
+    role: Editor
+  - ext: webp
+    name: WebP Image
+    description: WebP Image File
+    role: Editor
+mac:
+  category: public.app-category.photography
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+    - target: zip
+      arch:
+        - x64
+        - arm64
+  hardenedRuntime: false
+  gatekeeperAssess: false
+  identity: null
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+        - ia32
+    - target: portable
+      arch:
+        - x64
+linux:
+  category: Graphics
+  target:
+    - target: AppImage
+      arch:
+        - x64
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+publish:
+  provider: github
+  owner: pranavchavda
+  repo: langgraph-photo-editor
+electronVersion: 27.3.11

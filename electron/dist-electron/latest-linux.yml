@@ -1,0 +1,9 @@
+version: 1.0.0-beta.5
+files:
+  - url: LangGraph-Photo-Editor-1.0.0-beta.5.AppImage
+    sha512: 1CcVb8wfOHwerbDyGAnG9yXZivLiWxWyvNrgEs35lyNye3wyxEPW5Ted6lYa4nBUbjKoCeYGErnIQVMjZqBwDQ==
+    size: 168820725
+    blockMapSize: 176137
+path: LangGraph-Photo-Editor-1.0.0-beta.5.AppImage
+sha512: 1CcVb8wfOHwerbDyGAnG9yXZivLiWxWyvNrgEs35lyNye3wyxEPW5Ted6lYa4nBUbjKoCeYGErnIQVMjZqBwDQ==
+releaseDate: '2025-08-29T13:01:25.535Z'

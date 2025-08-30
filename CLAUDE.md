@@ -148,5 +148,44 @@ QUALITY_THRESHOLD=0.8                         # Minimum QC score
 - `rich>=13.0.0` - Terminal UI and progress display
 - `pillow>=10.0.0` - Image format handling
 
+## Recent Improvements (Latest)
+
+**AppImage File Management & Gemini Processing (August 29, 2025):**
+- ✅ **Fixed file management**: Resolved path mismatch between temp directory and Pictures folder
+- ✅ **Enhanced debug logging**: Added comprehensive file movement tracking in CLI
+- ✅ **Fixed Electron scandir errors**: Proper handling of file vs directory paths
+- ✅ **Optimized Gemini workflow**: Disabled ImageMagick fallback when Gemini is chosen
+- ✅ **Cross-platform compatibility**: Dynamic path resolution for Linux/Mac/Windows
+- ✅ **API quota handling**: Enhanced error handling for rate limits and processing failures
+
+**Strategy Options:**
+- `"imagemagick"` - Traditional parameter-based optimization
+- `"gemini"` - AI-powered natural language image editing
+- `"both"` - Hybrid approach using both technologies
+
+**File Locations:**
+- **Linux/Mac**: `~/Pictures/Agentic Photo Editor/`
+- **Windows**: `C:\Users\[username]\Pictures\Agentic Photo Editor\`
+- **Fallback**: `~/Documents/Agentic Photo Editor/` if Pictures doesn't exist
+
+## Electron AppImage Distribution
+
+**Build Process:**
+```bash
+cd electron/
+npm run electron:build
+```
+
+**Output:** `dist-electron/LangGraph Photo Editor-[version].AppImage`
+
+**Key Features:**
+- Self-contained Python environment bundling
+- Cross-platform file management
+- Real-time processing updates via IPC
+- Automatic API key detection from environment
+
 ## Development Notes for Claude Code
-- Use specialized Claude Code subagents for further coding. there are several available 
+- Use specialized Claude Code subagents for further coding when available
+- The AppImage build process handles Python bundling automatically
+- File management is cross-platform compatible
+- Gemini processing works seamlessly with proper API keys 

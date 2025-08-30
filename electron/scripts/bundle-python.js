@@ -163,6 +163,9 @@ class PythonBundler {
     
     // Copy standard library (selective)
     await this.copyStandardLibrary(venvLib, bundleLib);
+    
+    // Create pyvenv.cfg file for Windows
+    await this.createPyvenvCfg();
   }
 
   async bundleMacOS() {
@@ -194,6 +197,9 @@ class PythonBundler {
       
       await this.copyDir(venvPythonLib, bundlePythonLib);
     }
+    
+    // Create pyvenv.cfg file for macOS
+    await this.createPyvenvCfg();
   }
 
   async bundleLinux() {
@@ -272,6 +278,9 @@ class PythonBundler {
       // Fix namespace packages for Linux
       await this.fixNamespacePackages(bundlePythonLib);
     }
+    
+    // Create pyvenv.cfg file for Linux
+    await this.createPyvenvCfg();
   }
 
   async fixNamespacePackages(pythonLibPath) {
@@ -359,6 +368,59 @@ __path__ = __import__('pkgutil').extend_path(__path__, __name__)`;
         console.log(`  ⚠️  ${file} not found, skipping`);
       }
     }
+  }
+
+  async createPyvenvCfg() {
+    console.log('📄 Creating pyvenv.cfg for cross-platform compatibility...');
+    
+    // Get Python version from the bundled executable
+    let pythonVersion = '3.13.0';
+    let homeDir = this.bundleDir;
+    let executablePath;
+    
+    // Determine executable path based on platform
+    if (process.platform === 'win32') {
+      executablePath = path.join(homeDir, 'python.exe');
+    } else {
+      executablePath = path.join(homeDir, 'bin', 'python');
+    }
+    
+    try {
+      // Try to get version from the original venv
+      const venvCfgPath = path.join(this.venvDir, 'pyvenv.cfg');
+      if (fs.existsSync(venvCfgPath)) {
+        const venvCfg = fs.readFileSync(venvCfgPath, 'utf8');
+        const versionMatch = venvCfg.match(/version\s*=\s*(.+)/);
+        if (versionMatch) {
+          pythonVersion = versionMatch[1].trim();
+        }
+        const homeMatch = venvCfg.match(/home\s*=\s*(.+)/);
+        if (homeMatch) {
+          // Use original home for reference, but point to our bundle
+          homeDir = this.bundleDir;
+        }
+      }
+    } catch (error) {
+      console.log('  ⚠️  Could not read original pyvenv.cfg, using defaults');
+    }
+    
+    // Normalize paths for cross-platform compatibility
+    const normalizedHome = homeDir.replace(/\\/g, '/');
+    const normalizedExecutable = executablePath.replace(/\\/g, '/');
+    
+    // Create pyvenv.cfg content
+    const pyvenvCfg = `home = ${normalizedHome}
+include-system-site-packages = false
+version = ${pythonVersion}
+executable = ${normalizedExecutable}
+command = python -m venv
+`;
+    
+    const pyvenvCfgPath = path.join(this.bundleDir, 'pyvenv.cfg');
+    fs.writeFileSync(pyvenvCfgPath, pyvenvCfg);
+    console.log(`  ✓ Created pyvenv.cfg with version ${pythonVersion}`);
+    console.log(`  ✓ Home directory: ${normalizedHome}`);
+    console.log(`  ✓ Executable: ${normalizedExecutable}`);
   }
 
   async createScripts() {
