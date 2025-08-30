@@ -158,7 +158,11 @@ jobs:
           
           if [ -f "$PYTHON_EXE" ]; then
             echo "✓ Python executable found"
-            $PYTHON_EXE --version || echo "Python version check failed"
+            if [ "$RUNNER_OS" = "Windows" ]; then
+              echo "✓ Skipping version check on Windows (prevents hanging)"
+            else
+              $PYTHON_EXE --version || echo "Python version check failed"
+            fi
           else
             echo "⚠️  Python executable not found at $PYTHON_EXE"
           fi
