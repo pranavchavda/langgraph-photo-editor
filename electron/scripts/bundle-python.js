@@ -58,6 +58,13 @@ class PythonBundler {
       console.log('\n✅ Python bundling completed successfully!\n');
       console.log(`Bundle created at: ${this.bundleDir}`);
       
+      // Force exit to prevent hanging in CI environments
+      const isCI = process.env.CI || process.env.GITHUB_ACTIONS;
+      if (isCI) {
+        console.log('🏁 Exiting cleanly for CI...');
+        process.exit(0);
+      }
+      
     } catch (error) {
       console.error('\n❌ Python bundling failed:', error.message);
       process.exit(1);
@@ -584,8 +591,11 @@ print("Bundle test complete!")
       // Set up timeout
       if (timeout > 0) {
         timeoutHandle = setTimeout(() => {
-          child.kill('SIGTERM');
-          reject(new Error(`Command timed out after ${timeout}ms`));
+          console.log(`  ⏰ Command timeout reached (${timeout}ms), terminating process...`);
+          child.kill('SIGKILL'); // Use SIGKILL instead of SIGTERM for immediate termination
+          setTimeout(() => {
+            reject(new Error(`Command timed out after ${timeout}ms`));
+          }, 100); // Give a brief moment for cleanup
         }, timeout);
       }
       
