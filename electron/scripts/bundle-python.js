@@ -59,7 +59,6 @@ class PythonBundler {
       console.log(`Bundle created at: ${this.bundleDir}`);
       
       // Force exit to prevent hanging in CI environments
-      const isCI = process.env.CI || process.env.GITHUB_ACTIONS;
       if (isCI) {
         console.log('🏁 Exiting cleanly for CI...');
         process.exit(0);
