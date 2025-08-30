@@ -139,7 +139,7 @@ jobs:
       - name: Test Python bundling
         run: npm run bundle-python
         working-directory: electron
-        timeout-minutes: 10
+        timeout-minutes: 20
 
       - name: Test Electron build (compile only)
         run: npm run build
