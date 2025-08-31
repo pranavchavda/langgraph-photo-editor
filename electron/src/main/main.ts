@@ -71,10 +71,38 @@ class PhotoEditorMain {
       const appPath = app.getAppPath();
       const resourcesPath = process.resourcesPath || appPath;
       
-      // Look for bundled Python in extraResources
-      const bundledPythonPath = path.join(resourcesPath, 'bundled-python');
+      // Multiple potential locations for bundled Python (ordered by likelihood)
+      const potentialPaths = [
+        // Standard electron-builder extraResources location
+        path.join(resourcesPath, 'bundled-python'),
+        // Alternative resource locations
+        path.join(path.dirname(resourcesPath), 'resources', 'bundled-python'),
+        path.join(resourcesPath, '..', 'resources', 'bundled-python'),
+        // AppImage specific locations
+        path.join(process.execPath, '..', 'resources', 'bundled-python'),
+        path.join(path.dirname(process.execPath), 'resources', 'bundled-python'),
+        // Fallback to app directory
+        path.join(appPath, 'bundled-python')
+      ];
       
-      if (fs.existsSync(bundledPythonPath)) {
+      console.log('🔍 Searching for bundled Python in the following locations:');
+      console.log(`  App path: ${appPath}`);
+      console.log(`  Resources path: ${resourcesPath}`);
+      console.log(`  Process executable: ${process.execPath}`);
+      
+      let bundledPythonPath = null;
+      for (const potentialPath of potentialPaths) {
+        console.log(`  Checking: ${potentialPath}`);
+        if (fs.existsSync(potentialPath)) {
+          bundledPythonPath = potentialPath;
+          console.log(`  ✓ Found bundled Python at: ${bundledPythonPath}`);
+          break;
+        } else {
+          console.log(`  ✗ Not found at: ${potentialPath}`);
+        }
+      }
+      
+      if (bundledPythonPath) {
         // Use bundled Python
         this.projectRoot = bundledPythonPath;
         
@@ -105,6 +133,7 @@ class PhotoEditorMain {
         this.photoEditorScript = path.join(bundledPythonPath, 'photo_editor.py');
       } else {
         // Fallback: try app directory structure
+        console.log('⚠️  No bundled Python found, falling back to system Python');
         this.projectRoot = appPath;
         this.pythonExecutable = process.platform === 'win32' ? 'python.exe' : 'python3';
         this.photoEditorScript = path.join(appPath, 'photo_editor.py');
@@ -121,12 +150,26 @@ class PhotoEditorMain {
       console.error(`Python executable not found at: ${this.pythonExecutable}`);
     }
     
-    console.log(`Development mode: ${isDev}`);
-    console.log(`Project root: ${this.projectRoot}`);
-    console.log(`Using Python: ${this.pythonExecutable}`);
-    console.log(`Using script: ${this.photoEditorScript}`);
-    console.log(`Python exists: ${fs.existsSync(this.pythonExecutable)}`);
-    console.log(`Script exists: ${fs.existsSync(this.photoEditorScript)}`);
+    console.log('\n🎯 Python Environment Configuration:');
+    console.log(`  Development mode: ${isDev}`);
+    console.log(`  Project root: ${this.projectRoot}`);
+    console.log(`  Python executable: ${this.pythonExecutable}`);
+    console.log(`  Photo editor script: ${this.photoEditorScript}`);
+    console.log(`  Platform: ${process.platform}`);
+    console.log(`  Architecture: ${process.arch}`);
+    console.log('\n📋 File Existence Check:');
+    console.log(`  Python executable exists: ${fs.existsSync(this.pythonExecutable)}`);
+    console.log(`  Photo editor script exists: ${fs.existsSync(this.photoEditorScript)}`);
+    
+    if (!fs.existsSync(this.pythonExecutable)) {
+      console.error(`\n❌ PYTHON EXECUTABLE NOT FOUND at: ${this.pythonExecutable}`);
+      console.error('This will cause processing to fail. Please check the installation.');
+    }
+    
+    if (!fs.existsSync(this.photoEditorScript)) {
+      console.error(`\n❌ PHOTO EDITOR SCRIPT NOT FOUND at: ${this.photoEditorScript}`);
+      console.error('This will cause processing to fail. Please check the installation.');
+    }
   }
 
   private setupApp() {
@@ -260,6 +303,9 @@ class PhotoEditorMain {
 
     // System info
     ipcMain.handle('get-system-info', async () => {
+      const pythonExists = fs.existsSync(this.pythonExecutable);
+      const scriptExists = fs.existsSync(this.photoEditorScript);
+      
       return {
         platform: process.platform,
         arch: process.arch,
@@ -268,7 +314,14 @@ class PhotoEditorMain {
         pythonExecutable: this.pythonExecutable,
         photoEditorScript: this.photoEditorScript,
         projectRoot: this.projectRoot,
-        scriptExists: fs.existsSync(this.photoEditorScript)
+        pythonExists,
+        scriptExists,
+        pythonStatus: pythonExists ? 'Found' : 'Missing',
+        pythonRuntimeStatus: pythonExists ? 'Python runtime is available for processing' : 'Python runtime is NOT available - processing will fail',
+        developmentMode: process.env.NODE_ENV === 'development',
+        appPath: app.getAppPath(),
+        resourcesPath: process.resourcesPath,
+        executablePath: process.execPath
       };
     });
 
