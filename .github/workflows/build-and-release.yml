@@ -84,8 +84,29 @@ jobs:
         working-directory: electron
 
       - name: Build Python bundle
-        run: npm run bundle-python
+        run: |
+          echo "Force building Python bundle for release..."
+          node scripts/bundle-python.js --force-rebuild
         working-directory: electron
+
+      - name: Verify Python bundle (Debug)
+        run: |
+          echo "Checking if Python bundle was created..."
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            PYTHON_EXE="electron/bundled-python/python.exe"
+          else
+            PYTHON_EXE="electron/bundled-python/bin/python"
+          fi
+          
+          if [ -f "$PYTHON_EXE" ]; then
+            echo "✓ Python executable found at: $PYTHON_EXE"
+            ls -la "$PYTHON_EXE"
+          else
+            echo "⚠️  Python executable not found at: $PYTHON_EXE"
+            echo "Contents of bundled-python directory:"
+            ls -la electron/bundled-python/ || echo "bundled-python directory not found"
+          fi
+        shell: bash
 
       - name: Build Electron app
         run: npm run electron:build -- --publish=never

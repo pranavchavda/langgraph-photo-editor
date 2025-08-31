@@ -23,11 +23,16 @@ class PythonBundler {
     try {
       // Check for CI optimization flag
       const isCI = process.env.CI || process.env.GITHUB_ACTIONS;
-      const skipIfExists = process.argv.includes('--skip-if-exists') || isCI;
+      const forceRebuild = process.argv.includes('--force-rebuild');
+      const skipIfExists = process.argv.includes('--skip-if-exists') || (isCI && !forceRebuild);
       
       if (skipIfExists && await this.bundleExists()) {
         console.log('✓ Bundle already exists, skipping for CI performance');
         return;
+      }
+      
+      if (forceRebuild) {
+        console.log('🔄 Force rebuild requested, proceeding with fresh bundle...');
       }
       
       // Clean previous bundle
