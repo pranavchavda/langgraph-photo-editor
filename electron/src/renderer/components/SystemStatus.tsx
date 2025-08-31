@@ -62,13 +62,13 @@ const SystemStatus: React.FC<SystemStatusProps> = ({ systemInfo }) => {
     // Python executable check
     items.push({
       name: 'Python Runtime',
-      status: currentSystemInfo.pythonExecutable ? 'success' : 'error',
-      message: currentSystemInfo.pythonExecutable 
-        ? `Found: ${currentSystemInfo.pythonExecutable}`
+      status: currentSystemInfo.pythonExists ? 'success' : 'error',
+      message: currentSystemInfo.pythonExists 
+        ? `${currentSystemInfo.pythonStatus}: ${currentSystemInfo.pythonExecutable}`
         : 'Python not found',
-      details: currentSystemInfo.pythonExecutable 
+      details: currentSystemInfo.pythonRuntimeStatus || (currentSystemInfo.pythonExists 
         ? 'Python runtime is available for processing'
-        : 'Python is required to run the photo editing pipeline'
+        : 'Python is required to run the photo editing pipeline')
     });
 
     // Photo editor script check
@@ -336,13 +336,26 @@ const SystemStatus: React.FC<SystemStatusProps> = ({ systemInfo }) => {
                 </div>
               )}
 
-              {!currentSystemInfo?.pythonExecutable && (
+              {!currentSystemInfo?.pythonExists && (
                 <div className="p-3 bg-red-400 bg-opacity-10 border border-red-400 rounded">
                   <p className="text-red-300 font-medium mb-2">Python Not Found</p>
-                  <p className="text-red-200 text-xs">
+                  <p className="text-red-200 text-xs mb-3">
                     Python is required to run the AI photo editing pipeline. 
-                    Please install Python 3.8+ and ensure it's available in your system PATH.
+                    The application searched in the following locations but could not find the bundled Python runtime.
                   </p>
+                  {currentSystemInfo?.developmentMode ? (
+                    <p className="text-red-200 text-xs">
+                      <strong>Development Mode:</strong> Install Python 3.8+ and ensure it's available in your system PATH, 
+                      or create a virtual environment in the project root.
+                    </p>
+                  ) : (
+                    <div className="text-red-200 text-xs space-y-1">
+                      <p><strong>Production Mode:</strong> The bundled Python runtime should be included with the application.</p>
+                      <p><strong>App Path:</strong> <code className="text-red-100">{currentSystemInfo?.appPath}</code></p>
+                      <p><strong>Resources Path:</strong> <code className="text-red-100">{currentSystemInfo?.resourcesPath}</code></p>
+                      <p><strong>Expected Location:</strong> <code className="text-red-100">{currentSystemInfo?.pythonExecutable}</code></p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
