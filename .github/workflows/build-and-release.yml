@@ -32,11 +32,17 @@ jobs:
     
     strategy:
       matrix:
-        os: [macos-latest, windows-latest, ubuntu-latest]
         include:
           - os: macos-latest
             platform: mac
-            artifact_name: 'macos-build'
+            arch: x64
+            artifact_name: 'macos-x64-build'
+            python_url: 'https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.9.17+20230726-x86_64-apple-darwin-install_only.tar.gz'
+          - os: macos-latest
+            platform: mac  
+            arch: arm64
+            artifact_name: 'macos-arm64-build'
+            python_url: 'https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.9.17+20230726-aarch64-apple-darwin-install_only.tar.gz'
           - os: windows-latest
             platform: win
             artifact_name: 'windows-build'
@@ -126,8 +132,32 @@ jobs:
       - name: Build Python bundle
         if: steps.should_run.outputs.skip != 'true'
         run: |
-          echo "Force building Python bundle for release..."
-          node scripts/bundle-python.js --force-rebuild
+          if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+            echo "Building standalone Python for macOS ${{ matrix.arch }}..."
+            
+            # Download and extract standalone Python
+            curl -L -o python.tar.gz "${{ matrix.python_url }}"
+            mkdir -p bundled-python
+            tar -xzf python.tar.gz -C bundled-python --strip-components=1
+            
+            # Make Python relocatable
+            bundled-python/bin/python3 -m ensurepip
+            bundled-python/bin/python3 -m pip install --upgrade pip
+            
+            # Install required packages
+            bundled-python/bin/python3 -m pip install --no-cache-dir -r ../requirements.txt
+            
+            # Copy project files
+            cp -r ../src bundled-python/
+            cp ../photo_editor.py bundled-python/
+            
+            # Remove unnecessary files to reduce size
+            find bundled-python -name "*.pyc" -delete
+            find bundled-python -name "__pycache__" -type d -delete
+          else
+            echo "Force building Python bundle for release..."
+            node scripts/bundle-python.js --force-rebuild
+          fi
         working-directory: electron
 
       - name: Verify Python bundle (Debug)
@@ -152,7 +182,12 @@ jobs:
 
       - name: Build Electron app
         if: steps.should_run.outputs.skip != 'true'
-        run: npm run electron:build -- --publish=never
+        run: |
+          if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+            npm run electron:build -- --${{ matrix.arch }} --publish=never
+          else
+            npm run electron:build -- --publish=never
+          fi
         working-directory: electron
         env:
           # Disable all code signing
