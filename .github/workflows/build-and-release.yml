@@ -33,12 +33,12 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: macos-latest
+          - os: macos-13  # Use Intel runner for x64 builds
             platform: mac
             arch: x64
             artifact_name: 'macos-x64-build'
             python_url: 'https://github.com/indygreg/python-build-standalone/releases/download/20230726/cpython-3.9.17+20230726-x86_64-apple-darwin-install_only.tar.gz'
-          - os: macos-latest
+          - os: macos-latest  # M1 runner for arm64 builds
             platform: mac  
             arch: arm64
             artifact_name: 'macos-arm64-build'
@@ -132,7 +132,7 @@ jobs:
       - name: Build Python bundle
         if: steps.should_run.outputs.skip != 'true'
         run: |
-          if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+          if [[ "${{ matrix.platform }}" == "mac" ]]; then
             echo "Building standalone Python for macOS ${{ matrix.arch }}..."
             
             # Download and extract standalone Python
@@ -183,7 +183,7 @@ jobs:
       - name: Build Electron app
         if: steps.should_run.outputs.skip != 'true'
         run: |
-          if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+          if [[ "${{ matrix.platform }}" == "mac" ]]; then
             npm run electron:build -- --${{ matrix.arch }} --publish=never
           else
             npm run electron:build -- --publish=never
