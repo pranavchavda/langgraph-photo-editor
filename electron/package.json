@@ -126,7 +126,8 @@
       "entitlementsInherit": "build/entitlements.mac.plist",
       "identity": null,
       "type": "distribution",
-      "artifactName": "${productName}-${version}-${arch}.${ext}"
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "x64ArchFiles": "**/bundled-python/**/*"
     },
     "win": {
       "target": [
