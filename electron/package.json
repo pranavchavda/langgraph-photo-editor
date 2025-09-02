@@ -80,7 +80,11 @@
       "dist/renderer/**/*"
     ],
     "extraResources": [
-      "bundled-python/**/*"
+      {
+        "from": "bundled-python",
+        "to": "bundled-python",
+        "filter": ["**/*", "!**/*.pyc", "!**/__pycache__"]
+      }
     ],
     "fileAssociations": [
       {
@@ -113,11 +117,11 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["x64", "arm64"]
+          "arch": "universal"
         },
         {
           "target": "zip",
-          "arch": ["x64", "arm64"]
+          "arch": "universal"
         }
       ],
       "hardenedRuntime": true,
@@ -126,7 +130,11 @@
       "entitlementsInherit": "build/entitlements.mac.plist",
       "identity": null,
       "type": "distribution",
-      "artifactName": "${productName}-${version}-${arch}.${ext}"
+      "artifactName": "${productName}-${version}-universal.${ext}",
+      "mergeASARs": false,
+      "x64OnlyAssets": [
+        "Contents/Resources/bundled-python/**/*"
+      ]
     },
     "win": {
       "target": [
