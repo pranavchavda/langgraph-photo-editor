@@ -131,8 +131,8 @@
       "identity": null,
       "type": "distribution",
       "artifactName": "${productName}-${version}-universal.${ext}",
-      "mergeASARs": false,
-      "singleArchFiles": "Contents/Resources/bundled-python/**"
+      "mergeASARs": true,
+      "x64ArchFiles": "**/bundled-python/**"
     },
     "win": {
       "target": [
