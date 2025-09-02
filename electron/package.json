@@ -131,8 +131,8 @@
       "identity": null,
       "type": "distribution",
       "artifactName": "${productName}-${version}-universal.${ext}",
-            "mergeASARs": true,
-      "singleArchFiles": "Contents/Resources/bundled-python/{lib/python*/site-packages/PIL/.dylibs/*,bin/*}"
+                  "mergeASARs": true,
+      "singleArchFiles": "Contents/Resources/bundled-python/bin/*"
 
     },
     "asarUnpack": ["**/bundled-python/**/*"],
