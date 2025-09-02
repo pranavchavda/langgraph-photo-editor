@@ -127,7 +127,7 @@
       "identity": null,
       "type": "distribution",
       "artifactName": "${productName}-${version}-${arch}.${ext}",
-      "x64ArchFiles": "**/bundled-python/**/*"
+      "x64ArchFiles": "Contents/Resources/bundled-python/**"
     },
     "win": {
       "target": [
