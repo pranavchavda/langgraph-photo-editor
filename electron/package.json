@@ -132,7 +132,8 @@
       "type": "distribution",
       "artifactName": "${productName}-${version}-universal.${ext}",
       "mergeASARs": true,
-      "x64ArchFiles": "Contents/Resources/bundled-python/**/*",
+      "singleArchFiles": "Contents/Resources/bundled-python/lib/python*/site-packages/PIL/.dylibs/*"
+    },,
       "asarUnpack": ["**/bundled-python/**/*"]
     },
     "win": {
