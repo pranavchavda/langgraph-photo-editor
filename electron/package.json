@@ -117,11 +117,7 @@
       "target": [
         {
           "target": "dmg",
-          "arch": "universal"
-        },
-        {
-          "target": "zip",
-          "arch": "universal"
+          "arch": ["x64", "arm64"]
         }
       ],
       "hardenedRuntime": true,
@@ -130,10 +126,9 @@
       "entitlementsInherit": "build/entitlements.mac.plist",
       "identity": null,
       "type": "distribution",
-      "artifactName": "${productName}-${version}-universal.${ext}",
-      "mergeASARs": true,
-      "x64ArchFiles": "**/bundled-python/**",
-      "asarUnpack": ["**/bundled-python/**/*"]
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "electronLanguages": ["en"],
+      "minimumSystemVersion": "10.14.0"
     },
     "win": {
       "target": [
