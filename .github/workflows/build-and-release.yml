@@ -126,8 +126,14 @@ jobs:
       - name: Build Python bundle
         if: steps.should_run.outputs.skip != 'true'
         run: |
-          echo "Force building Python bundle for release..."
-          node scripts/bundle-python.js --force-rebuild
+          if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+            echo "Skipping Python bundle for macOS universal build"
+            mkdir -p bundled-python
+            echo "Python will be installed by the app on first run" > bundled-python/README.txt
+          else
+            echo "Force building Python bundle for release..."
+            node scripts/bundle-python.js --force-rebuild
+          fi
         working-directory: electron
 
       - name: Verify Python bundle (Debug)
