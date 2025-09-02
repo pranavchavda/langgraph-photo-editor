@@ -113,11 +113,11 @@
       "target": [
         {
           "target": "dmg",
-          "arch": "universal"
+          "arch": ["x64", "arm64"]
         },
         {
           "target": "zip",
-          "arch": "universal"
+          "arch": ["x64", "arm64"]
         }
       ],
       "hardenedRuntime": true,
@@ -126,8 +126,7 @@
       "entitlementsInherit": "build/entitlements.mac.plist",
       "identity": null,
       "type": "distribution",
-      "artifactName": "${productName}-${version}-${arch}.${ext}",
-      "x64ArchFiles": "Contents/Resources/bundled-python/**"
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
     "win": {
       "target": [

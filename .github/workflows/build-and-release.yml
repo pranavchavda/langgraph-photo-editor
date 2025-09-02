@@ -10,6 +10,16 @@ on:
         description: 'Version to build (e.g., v1.0.0)'
         required: true
         default: 'v1.0.0-manual'
+      platform:
+        description: 'Platform to build (all, mac, windows, linux)'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - mac
+          - windows
+          - linux
 
 permissions:
   contents: write
@@ -38,7 +48,32 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Check if should run
+        id: should_run
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            echo "✓ Running build - triggered by push" 
+            echo "skip=false" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event.inputs.platform }}" == "all" || -z "${{ github.event.inputs.platform }}" ]]; then
+            echo "✓ Running build - all platforms selected"
+            echo "skip=false" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event.inputs.platform }}" == "mac" && "${{ matrix.platform }}" == "mac" ]]; then
+            echo "✓ Running build - macOS selected"
+            echo "skip=false" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event.inputs.platform }}" == "windows" && "${{ matrix.platform }}" == "win" ]]; then
+            echo "✓ Running build - Windows selected"
+            echo "skip=false" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event.inputs.platform }}" == "linux" && "${{ matrix.platform }}" == "linux" ]]; then
+            echo "✓ Running build - Linux selected"
+            echo "skip=false" >> $GITHUB_OUTPUT
+          else
+            echo "⏭️  Skipping ${{ matrix.platform }} build (filter: ${{ github.event.inputs.platform }})"
+            echo "skip=true" >> $GITHUB_OUTPUT
+          fi
+        shell: bash
+
       - name: Setup Node.js
+        if: steps.should_run.outputs.skip != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '18'
@@ -46,50 +81,57 @@ jobs:
           cache-dependency-path: electron/package-lock.json
 
       - name: Setup Python
+        if: steps.should_run.outputs.skip != 'true'
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
 
       - name: Install Python dependencies
+        if: steps.should_run.outputs.skip != 'true'
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
         shell: bash
 
       - name: Create virtual environment
+        if: steps.should_run.outputs.skip != 'true'
         run: |
           python -m venv venv
         shell: bash
 
       - name: Activate venv and install dependencies (Linux/macOS)
-        if: matrix.os != 'windows-latest'
+        if: steps.should_run.outputs.skip != 'true' && matrix.os != 'windows-latest'
         run: |
           source venv/bin/activate
           pip install -r requirements.txt
         shell: bash
 
       - name: Activate venv and install dependencies (Windows)
-        if: matrix.os == 'windows-latest'
+        if: steps.should_run.outputs.skip != 'true' && matrix.os == 'windows-latest'
         run: |
           venv\Scripts\activate
           pip install -r requirements.txt
         shell: cmd
 
       - name: Install Node.js dependencies
+        if: steps.should_run.outputs.skip != 'true'
         run: npm ci
         working-directory: electron
 
       - name: Prepare assets
+        if: steps.should_run.outputs.skip != 'true'
         run: npm run prepare-assets
         working-directory: electron
 
       - name: Build Python bundle
+        if: steps.should_run.outputs.skip != 'true'
         run: |
           echo "Force building Python bundle for release..."
           node scripts/bundle-python.js --force-rebuild
         working-directory: electron
 
       - name: Verify Python bundle (Debug)
+        if: steps.should_run.outputs.skip != 'true'
         run: |
           echo "Checking if Python bundle was created..."
           if [ "$RUNNER_OS" = "Windows" ]; then
@@ -109,6 +151,7 @@ jobs:
         shell: bash
 
       - name: Build Electron app
+        if: steps.should_run.outputs.skip != 'true'
         run: npm run electron:build -- --publish=never
         working-directory: electron
         env:
@@ -116,6 +159,7 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
       - name: List build artifacts (Debug)
+        if: steps.should_run.outputs.skip != 'true'
         run: |
           echo "Listing electron/dist-electron directory:"
           ls -la electron/dist-electron/ || echo "dist-electron not found"
@@ -123,6 +167,7 @@ jobs:
         shell: bash
 
       - name: Upload build artifacts
+        if: steps.should_run.outputs.skip != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
