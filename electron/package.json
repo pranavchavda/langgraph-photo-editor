@@ -131,11 +131,10 @@
       "identity": null,
       "type": "distribution",
       "artifactName": "${productName}-${version}-universal.${ext}",
-                              "mergeASARs": true,
-      "x64ArchFiles": "**/bundled-python/{lib/python*/site-packages/PIL/.dylibs/*,bin/*}"
-
+      "mergeASARs": true,
+      "x64ArchFiles": "**/bundled-python/**",
+      "asarUnpack": ["**/bundled-python/**/*"]
     },
-    "asarUnpack": ["**/bundled-python/**/*"],
     "win": {
       "target": [
         {
