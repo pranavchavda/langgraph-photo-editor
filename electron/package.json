@@ -132,9 +132,7 @@
       "type": "distribution",
       "artifactName": "${productName}-${version}-universal.${ext}",
       "mergeASARs": false,
-      "x64OnlyAssets": [
-        "Contents/Resources/bundled-python/**/*"
-      ]
+      "singleArchFiles": "Contents/Resources/bundled-python/**"
     },
     "win": {
       "target": [
