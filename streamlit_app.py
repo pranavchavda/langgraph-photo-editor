@@ -1,19 +1,47 @@
 """
-Doug's Photo Editor - Main Landing Page
-Navigate between Single Image and Batch Processing modes
+Doug's Photo Editor - Single Page App with Batch Mode Toggle
+Process single images or multiple images in batch
 """
 
 import streamlit as st
+import asyncio
 from pathlib import Path
+import tempfile
+import shutil
 from PIL import Image
+import os
+from datetime import datetime
+import streamlit.components.v1 as components
+import zipfile
+import io
+
+# Import our existing workflow
+from src.workflow_enhanced import process_single_image_enhanced
 
 # Page config
 st.set_page_config(
     page_title="Doug's Photo Editor",
     page_icon="📸",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
+
+# Initialize session state
+if 'processed_image' not in st.session_state:
+    st.session_state.processed_image = None
+if 'processed_image_data' not in st.session_state:
+    st.session_state.processed_image_data = None
+if 'processed_filename' not in st.session_state:
+    st.session_state.processed_filename = None
+if 'processing_metrics' not in st.session_state:
+    st.session_state.processing_metrics = None
+if 'batch_results' not in st.session_state:
+    st.session_state.batch_results = []
+if 'api_keys' not in st.session_state:
+    st.session_state.api_keys = {
+        'anthropic': '',
+        'gemini': '',
+        'removebg': ''
+    }
 
 # Custom CSS
 st.markdown("""
@@ -21,186 +49,443 @@ st.markdown("""
     .main {
         padding-top: 2rem;
     }
-    .feature-card {
-        padding: 2rem;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border-radius: 12px;
+    .stButton>button {
+        width: 100%;
+        background-color: #4CAF50;
         color: white;
-        text-align: center;
-        margin: 1rem 0;
-        transition: transform 0.3s;
+        font-weight: bold;
     }
-    .feature-card:hover {
-        transform: translateY(-5px);
-    }
-    h1 {
-        text-align: center;
+    .success-message {
+        padding: 1rem;
+        background-color: #d4edda;
+        border: 1px solid #c3e6cb;
+        border-radius: 4px;
+        color: #155724;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# Logo and title
-col1, col2, col3 = st.columns([1, 2, 1])
+# JavaScript for localStorage
+components.html("""
+<script>
+(function() {
+    function getStoredKeys() {
+        return {
+            anthropic: localStorage.getItem('photoEditor_anthropic') || '',
+            gemini: localStorage.getItem('photoEditor_gemini') || '',
+            removebg: localStorage.getItem('photoEditor_removebg') || ''
+        };
+    }
+    
+    function saveKeys() {
+        const inputs = document.querySelectorAll('input[type="password"]');
+        if (inputs.length >= 1) {
+            localStorage.setItem('photoEditor_anthropic', inputs[0].value || '');
+        }
+        if (inputs.length >= 2) {
+            localStorage.setItem('photoEditor_gemini', inputs[1].value || '');
+        }
+        if (inputs.length >= 3) {
+            localStorage.setItem('photoEditor_removebg', inputs[2].value || '');
+        }
+    }
+    
+    window.addEventListener('load', function() {
+        setTimeout(function() {
+            const stored = getStoredKeys();
+            const inputs = document.querySelectorAll('input[type="password"]');
+            
+            if (inputs.length >= 1 && stored.anthropic && !inputs[0].value) {
+                inputs[0].value = stored.anthropic;
+                inputs[0].dispatchEvent(new Event('input', { bubbles: true }));
+            }
+            if (inputs.length >= 2 && stored.gemini && !inputs[1].value) {
+                inputs[1].value = stored.gemini;
+                inputs[1].dispatchEvent(new Event('input', { bubbles: true }));
+            }
+            if (inputs.length >= 3 && stored.removebg && !inputs[2].value) {
+                inputs[2].value = stored.removebg;
+                inputs[2].dispatchEvent(new Event('input', { bubbles: true }));
+            }
+        }, 100);
+    });
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        setTimeout(function() {
+            document.querySelectorAll('input[type="password"]').forEach(input => {
+                input.addEventListener('change', saveKeys);
+                input.addEventListener('blur', saveKeys);
+            });
+        }, 500);
+    });
+})();
+</script>
+""", height=0)
 
-with col2:
-    # Display logo
+# Sidebar for settings
+with st.sidebar:
+    st.header("⚙️ Settings")
+    
+    st.subheader("API Keys")
+    st.markdown("*Your API keys are stored locally in your browser*")
+    
+    anthropic_key = st.text_input(
+        "Anthropic API Key", 
+        type="password",
+        key="anthropic_key_input",
+        value=st.session_state.api_keys['anthropic'],
+        help="Required for image analysis and quality control"
+    )
+    
+    gemini_key = st.text_input(
+        "Gemini API Key", 
+        type="password",
+        key="gemini_key_input",
+        value=st.session_state.api_keys['gemini'],
+        help="Required for AI-powered image editing"
+    )
+    
+    removebg_key = st.text_input(
+        "Remove.bg API Key (Optional)", 
+        type="password",
+        key="removebg_key_input",
+        value=st.session_state.api_keys['removebg'],
+        help="Optional - for professional background removal"
+    )
+    
+    if anthropic_key != st.session_state.api_keys['anthropic']:
+        st.session_state.api_keys['anthropic'] = anthropic_key
+    if gemini_key != st.session_state.api_keys['gemini']:
+        st.session_state.api_keys['gemini'] = gemini_key
+    if removebg_key != st.session_state.api_keys['removebg']:
+        st.session_state.api_keys['removebg'] = removebg_key
+    
+    st.subheader("Processing Options")
+    use_gemini = st.checkbox("Use Gemini 2.5 Flash", value=True)
+    remove_background = st.checkbox("Remove Background", value=False)
+    
+    st.info("💡 Tip: API keys are saved in your browser and persist across sessions")
+    
+    with st.expander("🔑 How to get API keys"):
+        st.markdown("""
+        - **Anthropic**: [console.anthropic.com](https://console.anthropic.com)
+        - **Gemini**: [makersuite.google.com/app/apikey](https://makersuite.google.com/app/apikey)
+        - **Remove.bg**: [remove.bg/api](https://remove.bg/api)
+        """)
+
+# Logo and title
+col_logo, col_title = st.columns([1, 4])
+
+with col_logo:
     logo_path = Path("logo.jpeg")
     if logo_path.exists():
         logo_image = Image.open(logo_path)
-        st.image(logo_image, width=200, use_container_width=False)
-    
-    st.markdown("<h1>Doug's Photo Editor</h1>", unsafe_allow_html=True)
+        st.image(logo_image, width=150)
+    else:
+        st.write("🤖")
+
+with col_title:
+    st.title("Doug's Photo Editor")
     st.markdown("""
-    <p style='text-align: center; font-size: 1.2em;'>
-    AI-powered photo enhancement for e-commerce<br>
-    Powered by Claude Sonnet 4 and Gemini 2.5 Flash
-    </p>
-    """, unsafe_allow_html=True)
+    Upload your product photos and let our multi-agent AI pipeline optimize them for e-commerce!
+    Powered by Claude Sonnet 4 and Gemini 2.5 Flash.
+    """)
+
+# Mode selector
+st.markdown("---")
+mode = st.radio(
+    "Choose Processing Mode:",
+    ["🖼️ Single Image", "📦 Batch Processing"],
+    horizontal=True,
+    help="Single Image: Process one image at a time | Batch: Process multiple images at once"
+)
 
 st.markdown("---")
 
-# Features section
-st.header("🎯 Choose Your Processing Mode")
-
-col1, col2 = st.columns(2)
-
-with col1:
-    st.markdown("""
-    <div class="feature-card">
-    <h2>🖼️ Single Image Mode</h2>
-    <p>Perfect for quick edits and testing</p>
-    <ul style='text-align: left; padding-left: 20%;'>
-        <li>Upload one image</li>
-        <li>See results instantly</li>
-        <li>Fine-tune instructions</li>
-        <li>Download enhanced version</li>
-    </ul>
-    </div>
-    """, unsafe_allow_html=True)
+# Single Image Mode
+if mode == "🖼️ Single Image":
+    st.header("📤 Upload Image")
     
-    st.markdown("""<a href="/Single_Image" target="_self" style="display: block; padding: 0.5rem 1rem; background-color: #4CAF50; color: white; text-align: center; text-decoration: none; border-radius: 4px; font-weight: bold;">🖼️ Go to Single Image Mode</a>""", unsafe_allow_html=True)
-
-with col2:
-    st.markdown("""
-    <div class="feature-card">
-    <h2>📦 Batch Processing</h2>
-    <p>Process your entire catalog at once</p>
-    <ul style='text-align: left; padding-left: 20%;'>
-        <li>Upload multiple images</li>
-        <li>Concurrent processing</li>
-        <li>Progress tracking</li>
-        <li>Download all as ZIP</li>
-    </ul>
-    </div>
-    """, unsafe_allow_html=True)
+    col1, col2 = st.columns(2)
     
-    st.markdown("""<a href="/Batch_Processing" target="_self" style="display: block; padding: 0.5rem 1rem; background-color: #4CAF50; color: white; text-align: center; text-decoration: none; border-radius: 4px; font-weight: bold;">📦 Go to Batch Processing</a>""", unsafe_allow_html=True)
-
-st.markdown("---")
-
-# How it works section
-st.header("🔄 How It Works")
-
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    st.subheader("1️⃣ Upload")
-    st.write("Select your product photos - single or multiple")
-
-with col2:
-    st.subheader("2️⃣ Process")
-    st.write("AI analyzes and enhances your images automatically")
-
-with col3:
-    st.subheader("3️⃣ Download")
-    st.write("Get professional, e-commerce ready photos")
-
-st.markdown("---")
-
-# Features grid
-st.header("✨ Features")
-
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    st.metric("AI Models", "2", help="Claude Sonnet 4 + Gemini 2.5 Flash")
-    st.caption("Dual AI for best results")
-
-with col2:
-    st.metric("Processing Speed", "~30s", help="Per image on average")
-    st.caption("Fast cloud processing")
-
-with col3:
-    st.metric("Formats Supported", "4+", help="JPG, PNG, WebP, and more")
-    st.caption("All major image formats")
-
-st.markdown("---")
-
-# Getting started section
-st.header("🚀 Getting Started")
-
-with st.expander("📝 First Time Setup"):
-    st.markdown("""
-    1. **Get your API Keys** (one-time setup):
-       - [Anthropic (Claude)](https://console.anthropic.com) - For image analysis
-       - [Google Gemini](https://makersuite.google.com/app/apikey) - For AI editing
-       - [Remove.bg](https://remove.bg/api) (Optional) - For background removal
+    with col1:
+        st.subheader("📷 Input")
+        uploaded_file = st.file_uploader(
+            "Choose an image to enhance...",
+            type=['png', 'jpg', 'jpeg', 'webp'],
+            key="single_upload"
+        )
+        
+        if uploaded_file:
+            image = Image.open(uploaded_file)
+            st.image(image, caption="Original Image", use_container_width=True)
+            
+            st.subheader("✏️ Instructions")
+            instructions = st.text_area(
+                "How would you like to enhance this image?",
+                value="Enhance this product photo for e-commerce. Make it more vibrant and professional. Ensure the product stands out.",
+                height=100
+            )
+            
+            process_button = st.button("🚀 Process Image", type="primary", use_container_width=True)
     
-    2. **Enter Keys in Sidebar**:
-       - Your keys are saved locally in your browser
-       - They persist across sessions
-       - Never sent to our servers
-    
-    3. **Choose Processing Mode**:
-       - Single Image: For individual photos
-       - Batch Processing: For multiple photos
-    
-    4. **Upload and Process**:
-       - Select your images
-       - Add instructions (or use defaults)
-       - Click Process!
-    """)
+    with col2:
+        st.subheader("📥 Result")
+        
+        # Display stored result if available
+        if st.session_state.processed_image is not None:
+            st.image(st.session_state.processed_image, caption="Enhanced Image", use_container_width=True)
+            
+            st.download_button(
+                label="⬇️ Download Enhanced Image",
+                data=st.session_state.processed_image_data,
+                file_name=st.session_state.processed_filename,
+                mime="image/webp"
+            )
+            
+            if st.session_state.processing_metrics:
+                st.subheader("📊 Processing Metrics")
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    st.metric("Quality Score", st.session_state.processing_metrics['quality'])
+                with col_b:
+                    st.metric("Strategy Used", st.session_state.processing_metrics['strategy'])
+        
+        if uploaded_file and process_button:
+            if not anthropic_key:
+                st.error("⚠️ Please enter your Anthropic API key in the sidebar")
+            elif use_gemini and not gemini_key:
+                st.error("⚠️ Please enter your Gemini API key in the sidebar")
+            else:
+                os.environ["ANTHROPIC_API_KEY"] = anthropic_key
+                os.environ["GEMINI_API_KEY"] = gemini_key
+                if removebg_key:
+                    os.environ["REMOVE_BG_API_KEY"] = removebg_key
+                
+                with st.spinner("🔄 Processing your image..."):
+                    try:
+                        with tempfile.TemporaryDirectory() as temp_dir:
+                            input_path = Path(temp_dir) / uploaded_file.name
+                            with open(input_path, "wb") as f:
+                                f.write(uploaded_file.getbuffer())
+                            
+                            result = asyncio.run(process_single_image_enhanced(
+                                image_path=str(input_path),
+                                custom_instructions=instructions,
+                                output_dir=temp_dir
+                            ))
+                            
+                            if result.get("final_image"):
+                                output_path = result.get("final_image")
+                                if output_path and Path(output_path).exists():
+                                    result_image = Image.open(output_path)
+                                    
+                                    st.session_state.processed_image = result_image
+                                    with open(output_path, "rb") as f:
+                                        st.session_state.processed_image_data = f.read()
+                                    st.session_state.processed_filename = f"enhanced_{uploaded_file.name}"
+                                    
+                                    quality = result.get('final_quality', result.get('quality_score', 'N/A'))
+                                    if quality != 'N/A':
+                                        quality_display = f"{quality}/10"
+                                    else:
+                                        quality_display = quality
+                                    strategy = result.get('strategy', 'Enhanced AI Pipeline')
+                                    st.session_state.processing_metrics = {
+                                        'quality': quality_display,
+                                        'strategy': strategy
+                                    }
+                                    
+                                    st.success("✅ Image processed successfully!")
+                                    st.rerun()
+                                else:
+                                    st.error("❌ Output image not found")
+                            else:
+                                error_msg = result.get('error', 'Unknown error occurred')
+                                st.error(f"❌ Processing failed: {error_msg}")
+                                
+                    except Exception as e:
+                        st.error(f"❌ Error: {str(e)}")
 
-with st.expander("💡 Tips for Best Results"):
-    st.markdown("""
-    - **Good Lighting**: Start with well-lit product photos
-    - **Clear Instructions**: Be specific about what you want
-    - **Batch Similar Items**: Process similar products together
-    - **API Limits**: Be mindful of your API quotas
-    - **File Sizes**: Smaller files process faster (under 5MB recommended)
-    """)
-
-with st.expander("❓ Frequently Asked Questions"):
-    st.markdown("""
-    **Q: How many images can I process at once?**
-    A: Up to 50 images in batch mode, though we recommend 10-20 for best performance.
+# Batch Processing Mode
+else:  # mode == "📦 Batch Processing"
+    st.header("📤 Upload Multiple Images")
     
-    **Q: What format are the output images?**
-    A: WebP format for best quality and file size. PNG if WebP isn't available.
+    uploaded_files = st.file_uploader(
+        "Choose images to process...",
+        type=['png', 'jpg', 'jpeg', 'webp'],
+        accept_multiple_files=True,
+        key="batch_upload"
+    )
     
-    **Q: Are my images stored anywhere?**
-    A: No, images are processed in temporary memory and deleted immediately after.
-    
-    **Q: Can I use custom instructions?**
-    A: Yes! You can specify exactly how you want your images enhanced.
-    
-    **Q: What if processing fails?**
-    A: The app will show which images failed and why. Usually it's API limits.
-    """)
-
-# Sidebar instructions
-with st.sidebar:
-    st.header("📍 Navigation")
-    st.success("""
-    ⬆️ **Click the page names above!**
-    
-    The navigation menu is at the top of this sidebar:
-    • 🖼️ Single Image
-    • 📦 Batch Processing
-    """)
-    
-    st.header("🔑 API Keys")
-    st.caption("Enter your keys on either page - they're shared and saved locally")
+    if uploaded_files:
+        st.success(f"✅ {len(uploaded_files)} images selected")
+        
+        # Display thumbnails
+        st.subheader("📸 Selected Images")
+        cols = st.columns(min(len(uploaded_files), 5))
+        for idx, file in enumerate(uploaded_files[:5]):
+            with cols[idx]:
+                image = Image.open(file)
+                st.image(image, caption=file.name[:20], use_container_width=True)
+        
+        if len(uploaded_files) > 5:
+            st.info(f"...and {len(uploaded_files) - 5} more images")
+        
+        # Batch settings
+        col1, col2 = st.columns(2)
+        with col1:
+            st.subheader("✏️ Batch Instructions")
+            batch_instructions = st.text_area(
+                "Enter editing instructions (applied to all images):",
+                value="Enhance the product photo for e-commerce. Make it more vibrant and professional.",
+                height=100
+            )
+        
+        with col2:
+            st.subheader("⚙️ Batch Settings")
+            max_concurrent = st.slider(
+                "Concurrent Processing",
+                min_value=1,
+                max_value=5,
+                value=2,
+                help="Process multiple images at once (higher = faster but uses more resources)"
+            )
+        
+        process_batch_button = st.button("🚀 Process All Images", type="primary", use_container_width=True)
+        
+        if process_batch_button:
+            if not anthropic_key:
+                st.error("⚠️ Please enter your Anthropic API key in the sidebar")
+            elif use_gemini and not gemini_key:
+                st.error("⚠️ Please enter your Gemini API key in the sidebar")
+            else:
+                os.environ["ANTHROPIC_API_KEY"] = anthropic_key
+                os.environ["GEMINI_API_KEY"] = gemini_key
+                if removebg_key:
+                    os.environ["REMOVE_BG_API_KEY"] = removebg_key
+                
+                st.markdown("---")
+                st.header("⚙️ Processing Images")
+                
+                progress_bar = st.progress(0, text="Starting batch processing...")
+                status_text = st.empty()
+                
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    results = []
+                    
+                    async def process_image_async(file, idx, total):
+                        try:
+                            input_path = Path(temp_dir) / f"input_{idx}_{file.name}"
+                            with open(input_path, "wb") as f:
+                                f.write(file.getbuffer())
+                            
+                            status_text.text(f"Processing {file.name} ({idx + 1}/{total})...")
+                            
+                            result = await process_single_image_enhanced(
+                                image_path=str(input_path),
+                                custom_instructions=batch_instructions,
+                                output_dir=temp_dir
+                            )
+                            
+                            if result.get("final_image"):
+                                return {
+                                    "success": True,
+                                    "original_name": file.name,
+                                    "output_path": result.get("final_image"),
+                                    "quality": result.get('final_quality', result.get('quality_score', 'N/A'))
+                                }
+                            else:
+                                return {
+                                    "success": False,
+                                    "original_name": file.name,
+                                    "error": result.get('error', 'Unknown error')
+                                }
+                                
+                        except Exception as e:
+                            return {
+                                "success": False,
+                                "original_name": file.name,
+                                "error": str(e)
+                            }
+                    
+                    async def process_batch():
+                        tasks = []
+                        for idx, file in enumerate(uploaded_files):
+                            task = process_image_async(file, idx, len(uploaded_files))
+                            tasks.append(task)
+                        
+                        all_results = []
+                        for i in range(0, len(tasks), max_concurrent):
+                            batch = tasks[i:i + max_concurrent]
+                            batch_results = await asyncio.gather(*batch)
+                            all_results.extend(batch_results)
+                            
+                            progress = min((i + max_concurrent) / len(tasks), 1.0)
+                            progress_bar.progress(progress, text=f"Processed {min(i + max_concurrent, len(tasks))}/{len(tasks)} images")
+                        
+                        return all_results
+                    
+                    with st.spinner(f"Processing {len(uploaded_files)} images..."):
+                        results = asyncio.run(process_batch())
+                    
+                    progress_bar.progress(1.0, text="✅ Processing complete!")
+                    status_text.text("")
+                    
+                    successful = [r for r in results if r["success"]]
+                    failed = [r for r in results if not r["success"]]
+                    
+                    st.markdown("---")
+                    st.header("📊 Results Summary")
+                    
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Total Processed", len(results))
+                    with col2:
+                        st.metric("Successful", len(successful), delta=f"{len(successful)/len(results)*100:.0f}%")
+                    with col3:
+                        st.metric("Failed", len(failed))
+                    
+                    if successful:
+                        st.subheader("📦 Download Results")
+                        
+                        zip_buffer = io.BytesIO()
+                        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                            for result in successful:
+                                if Path(result["output_path"]).exists():
+                                    output_name = f"enhanced_{Path(result['original_name']).stem}.webp"
+                                    zip_file.write(result["output_path"], output_name)
+                        
+                        zip_buffer.seek(0)
+                        
+                        st.download_button(
+                            label="⬇️ Download All Enhanced Images (ZIP)",
+                            data=zip_buffer,
+                            file_name=f"enhanced_photos_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+                            mime="application/zip",
+                            use_container_width=True
+                        )
+                        
+                        st.subheader("✅ Successfully Processed Images")
+                        cols_per_row = 3
+                        for i in range(0, len(successful), cols_per_row):
+                            cols = st.columns(cols_per_row)
+                            for j, col in enumerate(cols):
+                                if i + j < len(successful):
+                                    result = successful[i + j]
+                                    with col:
+                                        if Path(result["output_path"]).exists():
+                                            enhanced_img = Image.open(result["output_path"])
+                                            st.image(enhanced_img, caption=f"{result['original_name'][:20]}", use_container_width=True)
+                                            
+                                            quality = result.get('quality', 'N/A')
+                                            if quality != 'N/A':
+                                                st.caption(f"Quality: {quality}/10")
+                    
+                    if failed:
+                        st.subheader("❌ Failed to Process")
+                        for result in failed:
+                            st.error(f"**{result['original_name']}**: {result['error']}")
 
 # Footer
 st.markdown("---")
