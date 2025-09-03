@@ -1,8 +1,0 @@
-# System packages required for the app
-# Streamlit Cloud will install these using apt-get
-
-# ImageMagick for image processing
-imagemagick
-
-# Additional libraries that might be needed
-libmagickwand-dev
