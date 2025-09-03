@@ -22,6 +22,25 @@ This is an AI-powered agentic photo editor that combines Claude Sonnet 4 vision 
 - ImageMagick for traditional photo optimization
 - Rich terminal UI for progress tracking
 
+## Streamlit Web Application
+
+### Deployment on Streamlit Cloud
+The app is designed to be deployed on Streamlit Cloud as an alternative to the desktop Electron app:
+
+**URL**: Deploy to `https://[your-app-name].streamlit.app`
+
+**Features:**
+- Single-page app with mode toggle (Single Image / Batch Processing)
+- Browser-based localStorage for API key persistence
+- No installation required for users
+- Cross-platform compatibility
+- Batch processing with ZIP download
+
+### Running Locally
+```bash
+streamlit run streamlit_app.py
+```
+
 ## Development Commands
 
 ### Environment Setup
@@ -150,7 +169,17 @@ QUALITY_THRESHOLD=0.8                         # Minimum QC score
 
 ## Recent Improvements (Latest)
 
-**AppImage File Management & Gemini Processing (August 29, 2025):**
+**Streamlit Web App & Deployment Fixes (September 3, 2025):**
+- ✅ **Created Streamlit web interface**: Full-featured web app for Doug, avoiding macOS compatibility issues
+- ✅ **Single-page app with batch mode**: Toggle between single image and batch processing modes
+- ✅ **localStorage API key persistence**: Keys saved in browser, persist across sessions
+- ✅ **Fixed Pregel workflow invocation**: Handles both function and Pregel graph invocations
+- ✅ **ImageMagick graceful degradation**: Works without ImageMagick, falls back to Gemini AI
+- ✅ **Fixed type error in ImageMagick agent**: Returns string path instead of dict when unavailable
+- ✅ **Batch processing with ZIP download**: Process multiple images, download all as ZIP
+- ✅ **Concurrent processing control**: 1-5 concurrent workers for batch processing
+
+**Previous Improvements (August 29, 2025):**
 - ✅ **Fixed file management**: Resolved path mismatch between temp directory and Pictures folder
 - ✅ **Enhanced debug logging**: Added comprehensive file movement tracking in CLI
 - ✅ **Fixed Electron scandir errors**: Proper handling of file vs directory paths
