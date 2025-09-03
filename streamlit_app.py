@@ -78,7 +78,7 @@ with col1:
     </div>
     """, unsafe_allow_html=True)
     
-    st.page_link("pages/1_🖼️_Single_Image.py", label="🖼️ Go to Single Image Mode", use_container_width=True)
+    st.markdown("""<a href="/Single_Image" target="_self" style="display: block; padding: 0.5rem 1rem; background-color: #4CAF50; color: white; text-align: center; text-decoration: none; border-radius: 4px; font-weight: bold;">🖼️ Go to Single Image Mode</a>""", unsafe_allow_html=True)
 
 with col2:
     st.markdown("""
@@ -94,7 +94,7 @@ with col2:
     </div>
     """, unsafe_allow_html=True)
     
-    st.page_link("pages/2_📦_Batch_Processing.py", label="📦 Go to Batch Processing", use_container_width=True)
+    st.markdown("""<a href="/Batch_Processing" target="_self" style="display: block; padding: 0.5rem 1rem; background-color: #4CAF50; color: white; text-align: center; text-decoration: none; border-radius: 4px; font-weight: bold;">📦 Go to Batch Processing</a>""", unsafe_allow_html=True)
 
 st.markdown("---")
 
