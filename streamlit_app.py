@@ -78,8 +78,7 @@ with col1:
     </div>
     """, unsafe_allow_html=True)
     
-    if st.button("🖼️ Go to Single Image Mode", type="primary", use_container_width=True):
-        st.switch_page("pages/1_🖼️_Single_Image.py")
+    st.page_link("pages/1_🖼️_Single_Image.py", label="🖼️ Go to Single Image Mode", use_container_width=True)
 
 with col2:
     st.markdown("""
@@ -95,8 +94,7 @@ with col2:
     </div>
     """, unsafe_allow_html=True)
     
-    if st.button("📦 Go to Batch Processing", type="primary", use_container_width=True):
-        st.switch_page("pages/2_📦_Batch_Processing.py")
+    st.page_link("pages/2_📦_Batch_Processing.py", label="📦 Go to Batch Processing", use_container_width=True)
 
 st.markdown("---")
 
