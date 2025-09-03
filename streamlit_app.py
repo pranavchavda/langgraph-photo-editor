@@ -1,350 +1,204 @@
 """
-Streamlit Web Interface for LangGraph Photo Editor
-For Doug and anyone who wants a simple web interface!
+Doug's Photo Editor - Main Landing Page
+Navigate between Single Image and Batch Processing modes
 """
 
 import streamlit as st
-import asyncio
 from pathlib import Path
-import tempfile
-import shutil
 from PIL import Image
-import os
-from datetime import datetime
-import streamlit.components.v1 as components
-
-# Import our existing workflow
-from src.workflow_enhanced import process_single_image_enhanced
 
 # Page config
 st.set_page_config(
-    page_title="AI Photo Editor",
+    page_title="Doug's Photo Editor",
     page_icon="📸",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# Initialize session state
-if 'processed_image' not in st.session_state:
-    st.session_state.processed_image = None
-if 'processed_image_data' not in st.session_state:
-    st.session_state.processed_image_data = None
-if 'processed_filename' not in st.session_state:
-    st.session_state.processed_filename = None
-if 'processing_metrics' not in st.session_state:
-    st.session_state.processing_metrics = None
-# Initialize session state for API keys
-if 'api_keys' not in st.session_state:
-    st.session_state.api_keys = {
-        'anthropic': '',
-        'gemini': '',
-        'removebg': ''
-    }
-    
-    # Try to get from environment/secrets as initial values
-    try:
-        # Check environment variables first
-        if os.getenv('ANTHROPIC_API_KEY'):
-            st.session_state.api_keys['anthropic'] = os.getenv('ANTHROPIC_API_KEY')
-        if os.getenv('GEMINI_API_KEY'):
-            st.session_state.api_keys['gemini'] = os.getenv('GEMINI_API_KEY')
-        if os.getenv('REMOVE_BG_API_KEY'):
-            st.session_state.api_keys['removebg'] = os.getenv('REMOVE_BG_API_KEY')
-            
-        # Override with Streamlit secrets if available
-        if 'ANTHROPIC_API_KEY' in st.secrets:
-            st.session_state.api_keys['anthropic'] = st.secrets['ANTHROPIC_API_KEY']
-        if 'GEMINI_API_KEY' in st.secrets:
-            st.session_state.api_keys['gemini'] = st.secrets['GEMINI_API_KEY']
-        if 'REMOVE_BG_API_KEY' in st.secrets:
-            st.session_state.api_keys['removebg'] = st.secrets['REMOVE_BG_API_KEY']
-    except:
-        pass  # No secrets configured, localStorage will handle it
-
-# Custom CSS and localStorage JavaScript
+# Custom CSS
 st.markdown("""
 <style>
     .main {
         padding-top: 2rem;
     }
-    .stButton>button {
-        width: 100%;
-        background-color: #4CAF50;
+    .feature-card {
+        padding: 2rem;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 12px;
         color: white;
-        font-weight: bold;
+        text-align: center;
+        margin: 1rem 0;
+        transition: transform 0.3s;
     }
-    .success-message {
-        padding: 1rem;
-        background-color: #d4edda;
-        border: 1px solid #c3e6cb;
-        border-radius: 4px;
-        color: #155724;
+    .feature-card:hover {
+        transform: translateY(-5px);
+    }
+    h1 {
+        text-align: center;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# JavaScript to handle localStorage
-components.html("""
-<script>
-(function() {
-    // Function to get stored keys
-    function getStoredKeys() {
-        return {
-            anthropic: localStorage.getItem('photoEditor_anthropic') || '',
-            gemini: localStorage.getItem('photoEditor_gemini') || '',
-            removebg: localStorage.getItem('photoEditor_removebg') || ''
-        };
-    }
-    
-    // Function to save keys
-    function saveKeys() {
-        const inputs = document.querySelectorAll('input[type="password"]');
-        if (inputs.length >= 1) {
-            localStorage.setItem('photoEditor_anthropic', inputs[0].value || '');
-        }
-        if (inputs.length >= 2) {
-            localStorage.setItem('photoEditor_gemini', inputs[1].value || '');
-        }
-        if (inputs.length >= 3) {
-            localStorage.setItem('photoEditor_removebg', inputs[2].value || '');
-        }
-    }
-    
-    // Auto-populate from localStorage on load
-    window.addEventListener('load', function() {
-        setTimeout(function() {
-            const stored = getStoredKeys();
-            const inputs = document.querySelectorAll('input[type="password"]');
-            
-            if (inputs.length >= 1 && stored.anthropic && !inputs[0].value) {
-                inputs[0].value = stored.anthropic;
-                inputs[0].dispatchEvent(new Event('input', { bubbles: true }));
-            }
-            if (inputs.length >= 2 && stored.gemini && !inputs[1].value) {
-                inputs[1].value = stored.gemini;
-                inputs[1].dispatchEvent(new Event('input', { bubbles: true }));
-            }
-            if (inputs.length >= 3 && stored.removebg && !inputs[2].value) {
-                inputs[2].value = stored.removebg;
-                inputs[2].dispatchEvent(new Event('input', { bubbles: true }));
-            }
-        }, 100);
-    });
-    
-    // Save on input change
-    document.addEventListener('DOMContentLoaded', function() {
-        setTimeout(function() {
-            document.querySelectorAll('input[type="password"]').forEach(input => {
-                input.addEventListener('change', saveKeys);
-                input.addEventListener('blur', saveKeys);
-            });
-        }, 500);
-    });
-})();
-</script>
-""", height=0)
+# Logo and title
+col1, col2, col3 = st.columns([1, 2, 1])
 
-# Logo and title section
-col_logo, col_title = st.columns([1, 4])
-
-with col_logo:
-    # Display logo if it exists
+with col2:
+    # Display logo
     logo_path = Path("logo.jpeg")
     if logo_path.exists():
         logo_image = Image.open(logo_path)
-        st.image(logo_image, width=150)
-    else:
-        st.write("🤖")
-
-with col_title:
-    st.title("Doug's Photo Editor")
+        st.image(logo_image, width=200, use_container_width=False)
+    
+    st.markdown("<h1>Doug's Photo Editor</h1>", unsafe_allow_html=True)
     st.markdown("""
-    Upload your product photos and let our multi-agent AI pipeline optimize them for e-commerce!
-    Powered by Claude Sonnet 4 and Gemini 2.5 Flash.
-    """)
+    <p style='text-align: center; font-size: 1.2em;'>
+    AI-powered photo enhancement for e-commerce<br>
+    Powered by Claude Sonnet 4 and Gemini 2.5 Flash
+    </p>
+    """, unsafe_allow_html=True)
 
-# Sidebar for settings
-with st.sidebar:
-    st.header("⚙️ Settings")
-    
-    st.subheader("API Keys")
-    st.markdown("*Your API keys are stored locally in your browser*")
-    
-    # API key inputs with session state persistence
-    anthropic_key = st.text_input(
-        "Anthropic API Key", 
-        type="password",
-        key="anthropic_key_input",
-        value=st.session_state.api_keys['anthropic'],
-        help="Required for image analysis and quality control"
-    )
-    
-    gemini_key = st.text_input(
-        "Gemini API Key", 
-        type="password",
-        key="gemini_key_input",
-        value=st.session_state.api_keys['gemini'],
-        help="Required for AI-powered image editing"
-    )
-    
-    removebg_key = st.text_input(
-        "Remove.bg API Key (Optional)", 
-        type="password",
-        key="removebg_key_input",
-        value=st.session_state.api_keys['removebg'],
-        help="Optional - for professional background removal"
-    )
-    
-    # Update session state when keys change and trigger localStorage save
-    if anthropic_key != st.session_state.api_keys['anthropic']:
-        st.session_state.api_keys['anthropic'] = anthropic_key
-        # JavaScript will automatically save to localStorage
-    if gemini_key != st.session_state.api_keys['gemini']:
-        st.session_state.api_keys['gemini'] = gemini_key
-        # JavaScript will automatically save to localStorage
-    if removebg_key != st.session_state.api_keys['removebg']:
-        st.session_state.api_keys['removebg'] = removebg_key
-        # JavaScript will automatically save to localStorage
-    
-    st.subheader("Processing Options")
-    use_gemini = st.checkbox("Use Gemini 2.5 Flash", value=True)
-    remove_background = st.checkbox("Remove Background", value=False)
-    
-    st.info("💡 Tip: API keys are saved in your browser and persist across sessions")
-    
-    # Add links to get API keys
-    with st.expander("🔑 How to get API keys"):
-        st.markdown("""
-        - **Anthropic (Claude)**: [console.anthropic.com](https://console.anthropic.com)
-        - **Google Gemini**: [makersuite.google.com/app/apikey](https://makersuite.google.com/app/apikey)
-        - **Remove.bg**: [remove.bg/api](https://remove.bg/api)
-        """)
+st.markdown("---")
 
-# Main content area
+# Features section
+st.header("🎯 Choose Your Processing Mode")
+
 col1, col2 = st.columns(2)
 
 with col1:
-    st.header("📤 Upload Image")
-    uploaded_file = st.file_uploader(
-        "Choose an image...",
-        type=['png', 'jpg', 'jpeg', 'webp'],
-        help="Upload a product photo to enhance"
-    )
+    st.markdown("""
+    <div class="feature-card">
+    <h2>🖼️ Single Image Mode</h2>
+    <p>Perfect for quick edits and testing</p>
+    <ul style='text-align: left; padding-left: 20%;'>
+        <li>Upload one image</li>
+        <li>See results instantly</li>
+        <li>Fine-tune instructions</li>
+        <li>Download enhanced version</li>
+    </ul>
+    </div>
+    """, unsafe_allow_html=True)
     
-    if uploaded_file is not None:
-        # Display uploaded image
-        image = Image.open(uploaded_file)
-        st.image(image, caption="Original Image", use_container_width=True)
-        
-        # Instructions
-        st.subheader("✏️ Instructions")
-        instructions = st.text_area(
-            "Enter your editing instructions:",
-            value="Enhance the product photo for e-commerce. Make it more vibrant and professional.",
-            height=100,
-            help="Describe what changes you want to make to the image"
-        )
-        
-        # Process button
-        process_button = st.button("🚀 Process Image", type="primary")
+    st.info("👈 **Click 'Single Image' in the sidebar to start**")
 
 with col2:
-    st.header("📥 Result")
+    st.markdown("""
+    <div class="feature-card">
+    <h2>📦 Batch Processing</h2>
+    <p>Process your entire catalog at once</p>
+    <ul style='text-align: left; padding-left: 20%;'>
+        <li>Upload multiple images</li>
+        <li>Concurrent processing</li>
+        <li>Progress tracking</li>
+        <li>Download all as ZIP</li>
+    </ul>
+    </div>
+    """, unsafe_allow_html=True)
     
-    # Display stored result if available
-    if st.session_state.processed_image is not None:
-        st.image(st.session_state.processed_image, caption="Enhanced Image", use_container_width=True)
-        
-        # Add download button
-        st.download_button(
-            label="⬇️ Download Enhanced Image",
-            data=st.session_state.processed_image_data,
-            file_name=st.session_state.processed_filename,
-            mime="image/webp"
-        )
-        
-        # Display metrics
-        if st.session_state.processing_metrics:
-            st.subheader("📊 Processing Metrics")
-            col_a, col_b = st.columns(2)
-            with col_a:
-                st.metric("Quality Score", st.session_state.processing_metrics['quality'])
-            with col_b:
-                st.metric("Strategy Used", st.session_state.processing_metrics['strategy'])
+    st.info("👈 **Click 'Batch Processing' in the sidebar to start**")
+
+st.markdown("---")
+
+# How it works section
+st.header("🔄 How It Works")
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.subheader("1️⃣ Upload")
+    st.write("Select your product photos - single or multiple")
+
+with col2:
+    st.subheader("2️⃣ Process")
+    st.write("AI analyzes and enhances your images automatically")
+
+with col3:
+    st.subheader("3️⃣ Download")
+    st.write("Get professional, e-commerce ready photos")
+
+st.markdown("---")
+
+# Features grid
+st.header("✨ Features")
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.metric("AI Models", "2", help="Claude Sonnet 4 + Gemini 2.5 Flash")
+    st.caption("Dual AI for best results")
+
+with col2:
+    st.metric("Processing Speed", "~30s", help="Per image on average")
+    st.caption("Fast cloud processing")
+
+with col3:
+    st.metric("Formats Supported", "4+", help="JPG, PNG, WebP, and more")
+    st.caption("All major image formats")
+
+st.markdown("---")
+
+# Getting started section
+st.header("🚀 Getting Started")
+
+with st.expander("📝 First Time Setup"):
+    st.markdown("""
+    1. **Get your API Keys** (one-time setup):
+       - [Anthropic (Claude)](https://console.anthropic.com) - For image analysis
+       - [Google Gemini](https://makersuite.google.com/app/apikey) - For AI editing
+       - [Remove.bg](https://remove.bg/api) (Optional) - For background removal
     
-    # Results placeholder for new processing
-    result_placeholder = st.empty()
-    progress_placeholder = st.empty()
+    2. **Enter Keys in Sidebar**:
+       - Your keys are saved locally in your browser
+       - They persist across sessions
+       - Never sent to our servers
     
-    if uploaded_file and process_button:
-        if not anthropic_key:
-            st.error("⚠️ Please enter your Anthropic API key in the sidebar")
-        elif use_gemini and not gemini_key:
-            st.error("⚠️ Please enter your Gemini API key in the sidebar")
-        else:
-            # Set environment variables from session state
-            os.environ["ANTHROPIC_API_KEY"] = anthropic_key
-            os.environ["GEMINI_API_KEY"] = gemini_key
-            if removebg_key:
-                os.environ["REMOVE_BG_API_KEY"] = removebg_key
-            
-            # Create temp directory
-            with tempfile.TemporaryDirectory() as temp_dir:
-                # Save uploaded file
-                input_path = Path(temp_dir) / uploaded_file.name
-                with open(input_path, "wb") as f:
-                    f.write(uploaded_file.getbuffer())
-                
-                # Process with workflow
-                with st.spinner("Processing your image... This may take a minute"):
-                    progress_bar = progress_placeholder.progress(0, text="Starting...")
-                    
-                    # Run the async workflow
-                    try:
-                        # Process the image
-                        result = asyncio.run(process_single_image_enhanced(
-                            image_path=str(input_path),
-                            custom_instructions=instructions,
-                            output_dir=temp_dir
-                        ))
-                        
-                        if result.get("final_image"):
-                            # Display result
-                            output_path = result.get("final_image")
-                            if output_path and Path(output_path).exists():
-                                result_image = Image.open(output_path)
-                                
-                                # Store in session state for persistence
-                                st.session_state.processed_image = result_image
-                                with open(output_path, "rb") as f:
-                                    st.session_state.processed_image_data = f.read()
-                                st.session_state.processed_filename = f"enhanced_{uploaded_file.name}"
-                                
-                                # Store metrics
-                                quality = result.get('final_quality', result.get('quality_score', 'N/A'))
-                                if quality != 'N/A':
-                                    quality_display = f"{quality}/10"
-                                else:
-                                    quality_display = quality
-                                strategy = result.get('strategy', 'Enhanced AI Pipeline')
-                                st.session_state.processing_metrics = {
-                                    'quality': quality_display,
-                                    'strategy': strategy
-                                }
-                                
-                                # Show success message
-                                st.success("✅ Image processed successfully!")
-                                
-                                # Force rerun to display from session state
-                                st.rerun()
-                            else:
-                                st.error("❌ Output image not found")
-                        else:
-                            st.error(f"❌ Processing failed: {result.get('error', 'Unknown error')}")
-                    
-                    except Exception as e:
-                        st.error(f"❌ Error: {str(e)}")
-                    finally:
-                        progress_placeholder.empty()
+    3. **Choose Processing Mode**:
+       - Single Image: For individual photos
+       - Batch Processing: For multiple photos
+    
+    4. **Upload and Process**:
+       - Select your images
+       - Add instructions (or use defaults)
+       - Click Process!
+    """)
+
+with st.expander("💡 Tips for Best Results"):
+    st.markdown("""
+    - **Good Lighting**: Start with well-lit product photos
+    - **Clear Instructions**: Be specific about what you want
+    - **Batch Similar Items**: Process similar products together
+    - **API Limits**: Be mindful of your API quotas
+    - **File Sizes**: Smaller files process faster (under 5MB recommended)
+    """)
+
+with st.expander("❓ Frequently Asked Questions"):
+    st.markdown("""
+    **Q: How many images can I process at once?**
+    A: Up to 50 images in batch mode, though we recommend 10-20 for best performance.
+    
+    **Q: What format are the output images?**
+    A: WebP format for best quality and file size. PNG if WebP isn't available.
+    
+    **Q: Are my images stored anywhere?**
+    A: No, images are processed in temporary memory and deleted immediately after.
+    
+    **Q: Can I use custom instructions?**
+    A: Yes! You can specify exactly how you want your images enhanced.
+    
+    **Q: What if processing fails?**
+    A: The app will show which images failed and why. Usually it's API limits.
+    """)
+
+# Sidebar instructions
+with st.sidebar:
+    st.header("📍 Navigation")
+    st.info("""
+    Use the pages above to navigate:
+    - **🖼️ Single Image**: Process one image
+    - **📦 Batch Processing**: Process multiple images
+    """)
+    
+    st.header("🔑 API Keys")
+    st.caption("Enter your keys on either page - they're shared and saved locally")
 
 # Footer
 st.markdown("---")
