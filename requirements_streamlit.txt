@@ -1,0 +1,21 @@
+# Core Streamlit requirements for web deployment
+streamlit>=1.32.0
+
+# AI/ML Dependencies
+langchain>=0.2.0
+langchain-anthropic>=0.1.15
+langgraph>=0.2.0
+anthropic>=0.34.0
+google-generativeai>=0.8.0
+
+# Image processing
+Pillow>=10.0.0
+Wand>=0.6.13
+
+# HTTP and utilities
+httpx>=0.24.0
+python-dotenv>=1.0.0
+tenacity>=8.0.0
+
+# Data handling
+pydantic>=2.0.0

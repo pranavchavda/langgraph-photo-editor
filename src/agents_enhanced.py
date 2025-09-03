@@ -17,9 +17,26 @@ from anthropic import AsyncAnthropic
 import requests
 from langgraph.config import get_stream_writer
 
-# Configure APIs
-anthropic_client = AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+# Global clients - initialized lazily
+anthropic_client = None
+
+def get_anthropic_client():
+    """Get or create Anthropic client with current API key"""
+    global anthropic_client
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise AgentError("ANTHROPIC_API_KEY not set")
+    if anthropic_client is None or anthropic_client.api_key != api_key:
+        anthropic_client = AsyncAnthropic(api_key=api_key)
+    return anthropic_client
+
+def configure_gemini():
+    """Configure Gemini with current API key"""
+    api_key = os.getenv("GEMINI_API_KEY")
+    if api_key:
+        genai.configure(api_key=api_key)
+    else:
+        raise AgentError("GEMINI_API_KEY not set")
 
 
 class AgentError(Exception):
@@ -131,7 +148,8 @@ async def enhanced_analysis_agent(image_path: str, custom_instructions: Optional
     """
     
     try:
-        response = await anthropic_client.messages.create(
+        client = get_anthropic_client()
+        response = await client.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=1200,
             messages=[{
@@ -236,6 +254,8 @@ async def gemini_edit_agent(image_path: str, analysis: Dict[str, Any]) -> str:
     
     try:
         print("🤖 Starting Gemini AI editing...")
+        # Configure Gemini API
+        configure_gemini()
         # Configure Gemini model
         model = genai.GenerativeModel('gemini-2.5-flash-image-preview')
         
@@ -568,7 +588,8 @@ async def enhanced_qc_agent(image_path: str, original_analysis: Dict[str, Any]) 
     """
     
     try:
-        response = await anthropic_client.messages.create(
+        client = get_anthropic_client()
+        response = await client.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=800,
             messages=[{
