@@ -422,13 +422,21 @@ async def process_single_image_enhanced(
     
     # Process with enhanced workflow
     import uuid
-    config = {"configurable": {"thread_id": str(uuid.uuid4())}}
     
-    # Call the entrypoint function directly
-    result = await enhanced_agentic_processor({
-        "image_path": image_path,
-        "custom_instructions": custom_instructions
-    }, save=config)
+    # Check if enhanced_agentic_processor is a Pregel graph or function
+    if hasattr(enhanced_agentic_processor, 'ainvoke'):
+        # It's a Pregel graph, use ainvoke
+        config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+        result = await enhanced_agentic_processor.ainvoke({
+            "image_path": image_path,
+            "custom_instructions": custom_instructions
+        }, config=config)
+    else:
+        # It's a function, call directly
+        result = await enhanced_agentic_processor({
+            "image_path": image_path,
+            "custom_instructions": custom_instructions
+        })
     
     # Move output if different directory specified
     if output_dir and result.get("final_image"):
