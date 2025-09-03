@@ -16,6 +16,7 @@ import google.generativeai as genai
 from anthropic import AsyncAnthropic
 import requests
 from langgraph.config import get_stream_writer
+from langgraph.func import task
 
 # Global clients - initialized lazily
 anthropic_client = None
@@ -384,7 +385,6 @@ async def gemini_edit_agent(image_path: str, analysis: Dict[str, Any]) -> str:
         raise AgentError(error_msg)
 
 
-@task
 async def imagemagick_optimization_agent(image_path: str, analysis: Dict[str, Any]) -> str:
     """
     ⚡ ImageMagick Optimization Agent - Traditional image processing
