@@ -44,6 +44,19 @@ class AgentError(Exception):
     pass
 
 
+def get_imagemagick_command():
+    """Get the correct ImageMagick command for the platform"""
+    import shutil
+    
+    # Try different ImageMagick command variations
+    for cmd in ['magick', 'convert', 'imagemagick']:
+        if shutil.which(cmd):
+            return cmd
+    
+    # If no command found, return 'convert' as fallback (common on Linux)
+    return 'convert'
+
+
 def encode_image_to_base64(image_path: str) -> str:
     """Encode image to base64 string"""
     with open(image_path, "rb") as image_file:
@@ -389,9 +402,17 @@ async def imagemagick_optimization_agent(image_path: str, analysis: Dict[str, An
     output_path = str(Path(image_path).parent / f"{Path(image_path).stem}-optimized.webp")
     
     try:
-        # Build ImageMagick command
+        # Build ImageMagick command with platform detection
+        magick_cmd = get_imagemagick_command()
         cmd_parts = imagemagick_command.strip().split()
-        full_cmd = ["magick", image_path] + cmd_parts + ["-flatten", output_path]
+        
+        # Adjust command based on which ImageMagick binary is available
+        if magick_cmd == 'convert':
+            # Old ImageMagick format (v6 and earlier)
+            full_cmd = [magick_cmd, image_path] + cmd_parts + ["-flatten", output_path]
+        else:
+            # New ImageMagick format (v7+)
+            full_cmd = [magick_cmd, image_path] + cmd_parts + ["-flatten", output_path]
         
         writer({
             "agent": "imagemagick",
@@ -485,7 +506,8 @@ async def background_removal_agent(image_path: str, analysis: Dict[str, Any]) ->
             webp_path = str(Path(image_path).parent / f"{Path(image_path).stem}-no-bg.webp")
             try:
                 import subprocess
-                cmd = ["magick", png_path, "-quality", "95", webp_path]
+                magick_cmd = get_imagemagick_command()
+                cmd = [magick_cmd, png_path, "-quality", "95", webp_path]
                 result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
                 
                 if result.returncode == 0:

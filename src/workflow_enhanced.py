@@ -424,10 +424,11 @@ async def process_single_image_enhanced(
     import uuid
     config = {"configurable": {"thread_id": str(uuid.uuid4())}}
     
-    result = await enhanced_agentic_processor.ainvoke({
+    # Call the entrypoint function directly
+    result = await enhanced_agentic_processor({
         "image_path": image_path,
         "custom_instructions": custom_instructions
-    }, config=config)
+    }, save=config)
     
     # Move output if different directory specified
     if output_dir and result.get("final_image"):
