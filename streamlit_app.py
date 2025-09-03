@@ -37,11 +37,14 @@ if 'processing_metrics' not in st.session_state:
 if 'batch_results' not in st.session_state:
     st.session_state.batch_results = []
 if 'api_keys' not in st.session_state:
+    # Initialize with empty values
     st.session_state.api_keys = {
         'anthropic': '',
         'gemini': '',
         'removebg': ''
     }
+if 'keys_loaded' not in st.session_state:
+    st.session_state.keys_loaded = False
 
 # Custom CSS
 st.markdown("""
@@ -65,62 +68,67 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# JavaScript for localStorage
-components.html("""
+# JavaScript for localStorage - improved persistence
+local_storage_js = """
 <script>
 (function() {
-    function getStoredKeys() {
-        return {
-            anthropic: localStorage.getItem('photoEditor_anthropic') || '',
-            gemini: localStorage.getItem('photoEditor_gemini') || '',
-            removebg: localStorage.getItem('photoEditor_removebg') || ''
-        };
-    }
-    
-    function saveKeys() {
+    // Save keys when they change
+    const saveToStorage = () => {
         const inputs = document.querySelectorAll('input[type="password"]');
-        if (inputs.length >= 1) {
-            localStorage.setItem('photoEditor_anthropic', inputs[0].value || '');
+        if (inputs[0] && inputs[0].value) {
+            localStorage.setItem('doug_anthropic', inputs[0].value);
         }
-        if (inputs.length >= 2) {
-            localStorage.setItem('photoEditor_gemini', inputs[1].value || '');
+        if (inputs[1] && inputs[1].value) {
+            localStorage.setItem('doug_gemini', inputs[1].value);
         }
-        if (inputs.length >= 3) {
-            localStorage.setItem('photoEditor_removebg', inputs[2].value || '');
+        if (inputs[2] && inputs[2].value) {
+            localStorage.setItem('doug_removebg', inputs[2].value);
         }
-    }
+    };
     
-    window.addEventListener('load', function() {
-        setTimeout(function() {
-            const stored = getStoredKeys();
-            const inputs = document.querySelectorAll('input[type="password"]');
+    // Load saved keys
+    const loadFromStorage = () => {
+        const anthropic = localStorage.getItem('doug_anthropic');
+        const gemini = localStorage.getItem('doug_gemini');
+        const removebg = localStorage.getItem('doug_removebg');
+        
+        const inputs = document.querySelectorAll('input[type="password"]');
+        if (inputs[0] && anthropic) {
+            inputs[0].value = anthropic;
+            inputs[0].dispatchEvent(new Event('input', {bubbles: true}));
+        }
+        if (inputs[1] && gemini) {
+            inputs[1].value = gemini;
+            inputs[1].dispatchEvent(new Event('input', {bubbles: true}));
+        }
+        if (inputs[2] && removebg) {
+            inputs[2].value = removebg;
+            inputs[2].dispatchEvent(new Event('input', {bubbles: true}));
+        }
+    };
+    
+    // Try loading multiple times to ensure inputs are ready
+    let attempts = 0;
+    const tryLoad = setInterval(() => {
+        const inputs = document.querySelectorAll('input[type="password"]');
+        if (inputs.length >= 3 || attempts > 10) {
+            loadFromStorage();
             
-            if (inputs.length >= 1 && stored.anthropic && !inputs[0].value) {
-                inputs[0].value = stored.anthropic;
-                inputs[0].dispatchEvent(new Event('input', { bubbles: true }));
-            }
-            if (inputs.length >= 2 && stored.gemini && !inputs[1].value) {
-                inputs[1].value = stored.gemini;
-                inputs[1].dispatchEvent(new Event('input', { bubbles: true }));
-            }
-            if (inputs.length >= 3 && stored.removebg && !inputs[2].value) {
-                inputs[2].value = stored.removebg;
-                inputs[2].dispatchEvent(new Event('input', { bubbles: true }));
-            }
-        }, 100);
-    });
-    
-    document.addEventListener('DOMContentLoaded', function() {
-        setTimeout(function() {
-            document.querySelectorAll('input[type="password"]').forEach(input => {
-                input.addEventListener('change', saveKeys);
-                input.addEventListener('blur', saveKeys);
+            // Add save listeners
+            inputs.forEach(input => {
+                input.addEventListener('input', saveToStorage);
+                input.addEventListener('change', saveToStorage);
             });
-        }, 500);
-    });
+            
+            clearInterval(tryLoad);
+        }
+        attempts++;
+    }, 200);
 })();
 </script>
-""", height=0)
+"""
+
+components.html(local_storage_js, height=0)
 
 # Sidebar for settings
 with st.sidebar:
@@ -153,12 +161,10 @@ with st.sidebar:
         help="Optional - for professional background removal"
     )
     
-    if anthropic_key != st.session_state.api_keys['anthropic']:
-        st.session_state.api_keys['anthropic'] = anthropic_key
-    if gemini_key != st.session_state.api_keys['gemini']:
-        st.session_state.api_keys['gemini'] = gemini_key
-    if removebg_key != st.session_state.api_keys['removebg']:
-        st.session_state.api_keys['removebg'] = removebg_key
+    # Update session state
+    st.session_state.api_keys['anthropic'] = anthropic_key
+    st.session_state.api_keys['gemini'] = gemini_key  
+    st.session_state.api_keys['removebg'] = removebg_key
     
     st.subheader("Processing Options")
     use_gemini = st.checkbox("Use Gemini 2.5 Flash", value=True)
