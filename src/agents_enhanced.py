@@ -414,11 +414,8 @@ async def imagemagick_optimization_agent(image_path: str, analysis: Dict[str, An
                 "status": "skipped",
                 "message": "ImageMagick not available on this system, using Gemini AI editing only"
             })
-            # Return original image path
-            return {
-                "optimized_image": image_path,
-                "optimization_applied": "none - ImageMagick not available"
-            }
+            # Return original image path (as string, not dict)
+            return image_path
         
         cmd_parts = imagemagick_command.strip().split()
         
