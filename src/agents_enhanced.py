@@ -53,8 +53,8 @@ def get_imagemagick_command():
         if shutil.which(cmd):
             return cmd
     
-    # If no command found, return 'convert' as fallback (common on Linux)
-    return 'convert'
+    # If no command found, return None
+    return None
 
 
 def encode_image_to_base64(image_path: str) -> str:
@@ -384,6 +384,7 @@ async def gemini_edit_agent(image_path: str, analysis: Dict[str, Any]) -> str:
         raise AgentError(error_msg)
 
 
+@task
 async def imagemagick_optimization_agent(image_path: str, analysis: Dict[str, Any]) -> str:
     """
     ⚡ ImageMagick Optimization Agent - Traditional image processing
@@ -404,6 +405,21 @@ async def imagemagick_optimization_agent(image_path: str, analysis: Dict[str, An
     try:
         # Build ImageMagick command with platform detection
         magick_cmd = get_imagemagick_command()
+        
+        # Check if ImageMagick is available
+        if not magick_cmd:
+            # ImageMagick not installed - skip this agent
+            writer({
+                "agent": "imagemagick",
+                "status": "skipped",
+                "message": "ImageMagick not available on this system, using Gemini AI editing only"
+            })
+            # Return original image path
+            return {
+                "optimized_image": image_path,
+                "optimization_applied": "none - ImageMagick not available"
+            }
+        
         cmd_parts = imagemagick_command.strip().split()
         
         # Adjust command based on which ImageMagick binary is available
@@ -507,10 +523,23 @@ async def background_removal_agent(image_path: str, analysis: Dict[str, Any]) ->
             try:
                 import subprocess
                 magick_cmd = get_imagemagick_command()
-                cmd = [magick_cmd, png_path, "-quality", "95", webp_path]
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
                 
-                if result.returncode == 0:
+                # If ImageMagick not available, just use the PNG
+                if not magick_cmd:
+                    # Return PNG directly (Streamlit can display PNGs too)
+                    webp_path = png_path  # Just use the PNG path
+                    result_ok = True
+                else:
+                    cmd = [magick_cmd, png_path, "-quality", "95", webp_path]
+                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+                    result_ok = (result.returncode == 0)
+                    
+                    if not result_ok:
+                        # Fallback to PNG if conversion fails
+                        webp_path = png_path
+                        result_ok = True
+                
+                if result_ok:
                     writer({
                         "agent": "background",
                         "status": "complete",
