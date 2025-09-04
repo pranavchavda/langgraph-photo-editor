@@ -22,6 +22,13 @@ from .agents_enhanced import (
     AgentError
 )
 
+# Import lens correction module
+try:
+    from .lens_corrections_advanced import apply_lens_corrections
+    LENS_CORRECTIONS_AVAILABLE = True
+except ImportError:
+    LENS_CORRECTIONS_AVAILABLE = False
+
 
 def finalize_output_with_quality_and_cleanup(
     current_path: str, 
@@ -124,6 +131,36 @@ async def run_background_agent(image_path: str, analysis: Dict[str, Any]) -> str
 
 
 @task
+async def run_lens_correction_agent(image_path: str, analysis: Dict[str, Any]) -> str:
+    """Run lens correction agent if needed"""
+    try:
+        # Check if lens correction is needed
+        needs_lens_correction = analysis.get("needs_lens_correction", False)
+        lens_issues = analysis.get("lens_issues", [])
+        
+        if needs_lens_correction and lens_issues and LENS_CORRECTIONS_AVAILABLE:
+            from .lens_corrections_advanced import apply_lens_corrections
+            
+            # Create output path for lens corrected image
+            input_path = Path(image_path)
+            output_path = input_path.parent / f"{input_path.stem}-lens-corrected{input_path.suffix}"
+            
+            # Apply lens corrections
+            result = apply_lens_corrections(str(input_path), str(output_path))
+            
+            if result.get("corrections_applied", False):
+                # Update analysis to indicate lens corrections were applied
+                analysis["lens_corrections_applied"] = True
+                return str(output_path)
+        
+        # Return original image path if no corrections applied
+        analysis["lens_corrections_applied"] = False
+        return image_path
+    except AgentError as e:
+        raise
+
+
+@task
 async def run_enhanced_qc_agent(image_path: str, analysis: Dict[str, Any]) -> Dict[str, Any]:
     """✅ Enhanced QC task wrapper"""
     try:
@@ -141,12 +178,13 @@ async def enhanced_agentic_processor(
     """
     🤖 Enhanced 5-Agent Photo Processing Workflow
     
-    New Flow:
-    1. Analysis (Claude) → Determines strategy: Gemini vs ImageMagick vs Both
-    2. Background Removal (remove.bg) → Clean background first
-    3. Gemini Editing (if selected) → Advanced AI-powered editing  
-    4. ImageMagick Optimization (if selected/fallback) → Traditional processing
-    5. Quality Control (Claude) → Validates results with fallback decisions
+    New Workflow Stages:
+1. 📊 Analysis Agent (Claude Sonnet 4) - Determines optimal editing strategy
+2. 🔍 Lens Correction Agent - Applies lens corrections using lensfunpy or ImageMagick fallback
+3. 🧠 Background Removal Agent - Applies background removal using advanced segmentation
+4. 🎨 Gemini Edit Agent - Uses Gemini 2.5 Flash Image for complex AI-powered editing
+5. 🛠️ ImageMagick Agent - Traditional image processing for simple optimizations
+6. ✅ QC Agent - Quality control and final evaluation
     """
     
     writer = get_stream_writer()
@@ -181,10 +219,29 @@ async def enhanced_agentic_processor(
         # Track intermediate files for cleanup
         intermediate_files = []
         
-        # Skip background removal initially - do it after Gemini editing
+        # Initialize current_image to track the working image path
         current_image = image_path
         
-        # 🎨 Stage 3: Gemini Editing (if strategy includes it)
+        # 🔍 Stage 2: Lens Correction (if needed)
+        lens_corrected_path = None
+        needs_lens_correction = analysis.get("needs_lens_correction", False)
+        lens_issues = analysis.get("lens_issues", [])
+        
+        if needs_lens_correction and lens_issues:
+            writer({
+                "stage": "lens_correction",
+                "message": "Applying lens corrections"
+            })
+            lens_corrected_path = await run_lens_correction_agent(current_image, analysis)
+            if lens_corrected_path != current_image:
+                current_image = lens_corrected_path
+                intermediate_files.append(lens_corrected_path)
+        
+        # Skip background removal initially - do it after Gemini editing
+        # This ensures lens correction is applied to the original image first
+        gemini_edited_path = None
+        
+        # 🎨 Stage 4: Gemini Editing (if strategy includes it)
         gemini_edited_path = None
         if editing_strategy in ["gemini", "both"]:
             writer({
@@ -423,20 +480,24 @@ async def process_single_image_enhanced(
     # Process with enhanced workflow
     import uuid
     
-    # Check if enhanced_agentic_processor is a Pregel graph or function
-    if hasattr(enhanced_agentic_processor, 'ainvoke'):
-        # It's a Pregel graph, use ainvoke
-        config = {"configurable": {"thread_id": str(uuid.uuid4())}}
-        result = await enhanced_agentic_processor.ainvoke({
-            "image_path": image_path,
-            "custom_instructions": custom_instructions
-        }, config=config)
-    else:
-        # It's a function, call directly
+    try:
+        # First try to call it as a function (when @entrypoint works normally)
         result = await enhanced_agentic_processor({
             "image_path": image_path,
             "custom_instructions": custom_instructions
         })
+    except TypeError as e:
+        # If we get "object is not callable", it's a Pregel graph
+        if "'Pregel' object is not callable" in str(e) or "object is not callable" in str(e):
+            # It's a Pregel graph, use ainvoke
+            config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+            result = await enhanced_agentic_processor.ainvoke({
+                "image_path": image_path,
+                "custom_instructions": custom_instructions
+            }, config=config)
+        else:
+            # Re-raise if it's a different TypeError
+            raise
     
     # Move output if different directory specified
     if output_dir and result.get("final_image"):

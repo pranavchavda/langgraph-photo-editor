@@ -14,10 +14,18 @@ from datetime import datetime
 import streamlit.components.v1 as components
 import zipfile
 import io
+from streamlit_local_storage import LocalStorage
 
-# Import our existing workflow and lens corrections
+# Import our existing workflow
 from src.workflow_enhanced import process_single_image_enhanced
-from src.lens_corrections import get_lens_options, apply_lens_corrections, get_focal_length_options
+
+# Try to use advanced lens corrections, fall back to basic if not available
+try:
+    from src.lens_corrections_advanced import apply_lens_corrections, get_lens_options, get_focal_length_options
+    LENS_CORRECTION_METHOD = "advanced (lensfunpy)"
+except ImportError:
+    from src.lens_corrections import apply_lens_corrections, get_lens_options, get_focal_length_options
+    LENS_CORRECTION_METHOD = "basic (ImageMagick)"
 
 # Page config
 st.set_page_config(
@@ -37,15 +45,27 @@ if 'processing_metrics' not in st.session_state:
     st.session_state.processing_metrics = None
 if 'batch_results' not in st.session_state:
     st.session_state.batch_results = []
+# Initialize LocalStorage
+localS = LocalStorage()
+
+# Initialize API keys in session state
 if 'api_keys' not in st.session_state:
-    # Initialize with empty values
-    st.session_state.api_keys = {
-        'anthropic': '',
-        'gemini': '',
-        'removebg': ''
-    }
-if 'keys_loaded' not in st.session_state:
-    st.session_state.keys_loaded = False
+    st.session_state.api_keys = {'anthropic': '', 'gemini': '', 'removebg': ''}
+
+# Load keys from localStorage
+# Note: getItem only takes itemKey parameter
+saved_anthropic = localS.getItem("doug_anthropic_key")
+saved_gemini = localS.getItem("doug_gemini_key")  
+saved_removebg = localS.getItem("doug_removebg_key")
+
+# Update session state if we got values from localStorage
+# Note: Due to component rendering, values might be None on first load
+if saved_anthropic:
+    st.session_state.api_keys['anthropic'] = saved_anthropic
+if saved_gemini:
+    st.session_state.api_keys['gemini'] = saved_gemini
+if saved_removebg:
+    st.session_state.api_keys['removebg'] = saved_removebg
 
 # Custom CSS
 st.markdown("""
@@ -69,103 +89,66 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# JavaScript for localStorage - improved persistence
-local_storage_js = """
-<script>
-(function() {
-    // Save keys when they change
-    const saveToStorage = () => {
-        const inputs = document.querySelectorAll('input[type="password"]');
-        if (inputs[0] && inputs[0].value) {
-            localStorage.setItem('doug_anthropic', inputs[0].value);
-        }
-        if (inputs[1] && inputs[1].value) {
-            localStorage.setItem('doug_gemini', inputs[1].value);
-        }
-        if (inputs[2] && inputs[2].value) {
-            localStorage.setItem('doug_removebg', inputs[2].value);
-        }
-    };
-    
-    // Load saved keys
-    const loadFromStorage = () => {
-        const anthropic = localStorage.getItem('doug_anthropic');
-        const gemini = localStorage.getItem('doug_gemini');
-        const removebg = localStorage.getItem('doug_removebg');
-        
-        const inputs = document.querySelectorAll('input[type="password"]');
-        if (inputs[0] && anthropic) {
-            inputs[0].value = anthropic;
-            inputs[0].dispatchEvent(new Event('input', {bubbles: true}));
-        }
-        if (inputs[1] && gemini) {
-            inputs[1].value = gemini;
-            inputs[1].dispatchEvent(new Event('input', {bubbles: true}));
-        }
-        if (inputs[2] && removebg) {
-            inputs[2].value = removebg;
-            inputs[2].dispatchEvent(new Event('input', {bubbles: true}));
-        }
-    };
-    
-    // Try loading multiple times to ensure inputs are ready
-    let attempts = 0;
-    const tryLoad = setInterval(() => {
-        const inputs = document.querySelectorAll('input[type="password"]');
-        if (inputs.length >= 3 || attempts > 10) {
-            loadFromStorage();
-            
-            // Add save listeners
-            inputs.forEach(input => {
-                input.addEventListener('input', saveToStorage);
-                input.addEventListener('change', saveToStorage);
-            });
-            
-            clearInterval(tryLoad);
-        }
-        attempts++;
-    }, 200);
-})();
-</script>
-"""
-
-components.html(local_storage_js, height=0)
+# No need for complex JavaScript anymore - LocalStorage handles it!
 
 # Sidebar for settings
 with st.sidebar:
     st.header("⚙️ Settings")
     
     st.subheader("API Keys")
-    st.markdown("*Your API keys are stored locally in your browser*")
     
-    anthropic_key = st.text_input(
-        "Anthropic API Key", 
-        type="password",
-        key="anthropic_key_input",
-        value=st.session_state.api_keys['anthropic'],
-        help="Required for image analysis and quality control"
-    )
+    # Use a form so file uploads don't clear the keys
+    with st.form("api_keys_form"):
+        st.markdown("*Enter your API keys and click Save*")
+        
+        anthropic_key = st.text_input(
+            "Anthropic API Key", 
+            type="password",
+            value=st.session_state.api_keys.get('anthropic', ''),
+            help="Required for image analysis and quality control"
+        )
+        
+        gemini_key = st.text_input(
+            "Gemini API Key", 
+            type="password",
+            value=st.session_state.api_keys.get('gemini', ''),
+            help="Required for AI-powered image editing"
+        )
+        
+        removebg_key = st.text_input(
+            "Remove.bg API Key (Optional)", 
+            type="password",
+            value=st.session_state.api_keys.get('removebg', ''),
+            help="Optional - for professional background removal"
+        )
+        
+        # Form submit button
+        save_keys = st.form_submit_button("💾 Save Keys", type="primary")
+        
+        if save_keys:
+            # Update session state
+            st.session_state.api_keys['anthropic'] = anthropic_key
+            st.session_state.api_keys['gemini'] = gemini_key
+            st.session_state.api_keys['removebg'] = removebg_key
+            
+            # Save to localStorage using streamlit-local-storage
+            # Each setItem needs a unique key for the component
+            if anthropic_key:
+                localS.setItem("doug_anthropic_key", anthropic_key, key="set_anthropic")
+            if gemini_key:
+                localS.setItem("doug_gemini_key", gemini_key, key="set_gemini")
+            if removebg_key:
+                localS.setItem("doug_removebg_key", removebg_key, key="set_removebg")
+            
+            st.success("✅ Keys saved to browser storage!")
     
-    gemini_key = st.text_input(
-        "Gemini API Key", 
-        type="password",
-        key="gemini_key_input",
-        value=st.session_state.api_keys['gemini'],
-        help="Required for AI-powered image editing"
-    )
-    
-    removebg_key = st.text_input(
-        "Remove.bg API Key (Optional)", 
-        type="password",
-        key="removebg_key_input",
-        value=st.session_state.api_keys['removebg'],
-        help="Optional - for professional background removal"
-    )
-    
-    # Update session state
-    st.session_state.api_keys['anthropic'] = anthropic_key
-    st.session_state.api_keys['gemini'] = gemini_key  
-    st.session_state.api_keys['removebg'] = removebg_key
+    # Show current status outside the form
+    if st.session_state.api_keys.get('anthropic'):
+        st.success("✅ Anthropic key loaded")
+    if st.session_state.api_keys.get('gemini'):
+        st.success("✅ Gemini key loaded")
+    if st.session_state.api_keys.get('removebg'):
+        st.success("✅ Remove.bg key loaded")
     
     st.subheader("Processing Options")
     use_gemini = st.checkbox("Use Gemini 2.5 Flash", value=True)
@@ -193,6 +176,7 @@ with st.sidebar:
             )
     
     st.info("💡 Tip: API keys are saved in your browser and persist across sessions")
+    st.caption(f"🔧 Lens corrections: {LENS_CORRECTION_METHOD}")
     
     with st.expander("🔑 How to get API keys"):
         st.markdown("""
@@ -299,15 +283,20 @@ if mode == "🖼️ Single Image":
                     st.metric("Strategy Used", st.session_state.processing_metrics['strategy'])
         
         if uploaded_file and process_button:
-            if not anthropic_key:
+            # Get keys from session state (saved via form)
+            final_anthropic = st.session_state.api_keys.get('anthropic', '')
+            final_gemini = st.session_state.api_keys.get('gemini', '')
+            final_removebg = st.session_state.api_keys.get('removebg', '')
+            
+            if not final_anthropic:
                 st.error("⚠️ Please enter your Anthropic API key in the sidebar")
-            elif use_gemini and not gemini_key:
+            elif use_gemini and not final_gemini:
                 st.error("⚠️ Please enter your Gemini API key in the sidebar")
             else:
-                os.environ["ANTHROPIC_API_KEY"] = anthropic_key
-                os.environ["GEMINI_API_KEY"] = gemini_key
-                if removebg_key:
-                    os.environ["REMOVE_BG_API_KEY"] = removebg_key
+                os.environ["ANTHROPIC_API_KEY"] = final_anthropic
+                os.environ["GEMINI_API_KEY"] = final_gemini
+                if final_removebg:
+                    os.environ["REMOVE_BG_API_KEY"] = final_removebg
                 
                 with st.spinner("🔄 Processing your image..."):
                     try:
@@ -329,14 +318,38 @@ if mode == "🖼️ Single Image":
                             if lens_result.get('corrections_applied'):
                                 st.info(f"📷 Applied lens corrections: {lens_result.get('message', '')}")
                                 process_path = corrected_path
+                            elif lens_result.get('lens_used'):
+                                # Lens was detected but corrections couldn't be applied
+                                if lens_result.get('detected_from_exif'):
+                                    st.info(f"📷 Auto-detected lens: {lens_result.get('lens_used')} (from EXIF)")
+                                st.warning(f"⚠️ {lens_result.get('reason', 'Corrections not applied')}")
+                                process_path = str(input_path)
                             else:
+                                # No lens detected
+                                if selected_lens == "None (Auto-detect from EXIF)":
+                                    st.info("📷 No lens data found in EXIF, proceeding without lens corrections")
                                 process_path = str(input_path)
                             
-                            result = asyncio.run(process_single_image_enhanced(
-                                image_path=process_path,
-                                custom_instructions=instructions,
-                                output_dir=temp_dir
-                            ))
+                            # Handle the Pregel invocation issue
+                            try:
+                                result = asyncio.run(process_single_image_enhanced(
+                                    image_path=process_path,
+                                    custom_instructions=instructions,
+                                    output_dir=temp_dir
+                                ))
+                            except Exception as workflow_error:
+                                # Check if it's the Pregel callable error
+                                if "'Pregel' object is not callable" in str(workflow_error):
+                                    # Try direct invocation with the graph
+                                    from src.workflow_enhanced import enhanced_agentic_processor
+                                    import uuid
+                                    config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+                                    result = asyncio.run(enhanced_agentic_processor.ainvoke({
+                                        "image_path": process_path,
+                                        "custom_instructions": instructions
+                                    }, config=config))
+                                else:
+                                    raise workflow_error
                             
                             if result.get("final_image"):
                                 output_path = result.get("final_image")
@@ -480,20 +493,42 @@ else:  # mode == "📦 Batch Processing"
                             )
                             
                             # Use corrected image if corrections were applied
-                            process_path = corrected_path if lens_result.get('corrections_applied') else str(input_path)
+                            if lens_result.get('corrections_applied'):
+                                process_path = corrected_path
+                                # Add lens info to status for batch mode
+                                if lens_result.get('detected_from_exif'):
+                                    status_text.text(f"Processing {file.name} ({idx + 1}/{total}) - Lens: {lens_result.get('lens_used')}")
+                            else:
+                                process_path = str(input_path)
                             
-                            result = await process_single_image_enhanced(
-                                image_path=process_path,
-                                custom_instructions=batch_instructions,
-                                output_dir=temp_dir
-                            )
+                            # Handle the Pregel invocation issue in batch mode
+                            try:
+                                result = await process_single_image_enhanced(
+                                    image_path=process_path,
+                                    custom_instructions=batch_instructions,
+                                    output_dir=temp_dir
+                                )
+                            except TypeError as e:
+                                if "'Pregel' object is not callable" in str(e):
+                                    # Direct invocation with the graph
+                                    from src.workflow_enhanced import enhanced_agentic_processor
+                                    import uuid
+                                    config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+                                    result = await enhanced_agentic_processor.ainvoke({
+                                        "image_path": process_path,
+                                        "custom_instructions": batch_instructions
+                                    }, config=config)
+                                else:
+                                    raise
                             
                             if result.get("final_image"):
                                 return {
                                     "success": True,
                                     "original_name": file.name,
                                     "output_path": result.get("final_image"),
-                                    "quality": result.get('final_quality', result.get('quality_score', 'N/A'))
+                                    "quality": result.get('final_quality', result.get('quality_score', 'N/A')),
+                                    "lens_detected": lens_result.get('lens_used') if lens_result.get('detected_from_exif') else None,
+                                    "lens_corrected": lens_result.get('corrections_applied', False)
                                 }
                             else:
                                 return {
@@ -538,6 +573,7 @@ else:  # mode == "📦 Batch Processing"
                     st.markdown("---")
                     st.header("📊 Results Summary")
                     
+                    # Main metrics
                     col1, col2, col3 = st.columns(3)
                     with col1:
                         st.metric("Total Processed", len(results))
@@ -545,6 +581,28 @@ else:  # mode == "📦 Batch Processing"
                         st.metric("Successful", len(successful), delta=f"{len(successful)/len(results)*100:.0f}%")
                     with col3:
                         st.metric("Failed", len(failed))
+                    
+                    # Lens detection summary if auto-detect was used
+                    if batch_lens == "None (Auto-detect from EXIF)" and successful:
+                        detected_lenses = {}
+                        corrected_count = 0
+                        for result in successful:
+                            if result.get('lens_detected'):
+                                detected_lenses[result['lens_detected']] = detected_lenses.get(result['lens_detected'], 0) + 1
+                            if result.get('lens_corrected'):
+                                corrected_count += 1
+                        
+                        if detected_lenses:
+                            st.subheader("📷 Lens Detection Summary")
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.info(f"🔍 Auto-detected from EXIF: {sum(detected_lenses.values())} images")
+                                for lens, count in detected_lenses.items():
+                                    st.write(f"• **{lens}**: {count} image{'s' if count > 1 else ''}")
+                            with col2:
+                                st.success(f"✅ Lens corrections applied: {corrected_count} images")
+                                if corrected_count < sum(detected_lenses.values()):
+                                    st.warning(f"⚠️ {sum(detected_lenses.values()) - corrected_count} detected but not corrected")
                     
                     if successful:
                         # Make the download section very prominent

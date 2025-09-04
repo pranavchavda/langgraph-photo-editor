@@ -8,3 +8,11 @@ pillow>=10.0.0
 click>=8.0.0
 rich>=13.0.0
 python-dotenv>=1.0.0
+
+# Optional but recommended for advanced lens corrections
+# Note: lensfunpy requires system libraries (lensfun)
+# On Ubuntu/Debian: sudo apt-get install liblensfun-dev
+# On macOS: brew install lensfun
+# Then: pip install lensfunpy
+# lensfunpy>=1.13.0
+scipy>=1.11.0  # Required for advanced image processing in lens corrections

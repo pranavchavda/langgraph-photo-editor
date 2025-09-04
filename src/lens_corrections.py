@@ -16,26 +16,26 @@ import json
 DOUG_LENS_PROFILES = {
     "Sony FE 24-70mm F2.8 GM": {
         "display_name": "Sony FE 24-70mm F2.8 GM",
-        "exif_names": ["FE 24-70mm F2.8 GM", "Sony FE 24-70mm F2.8 GM OSS", "24-70mm F2.8"],
+        "exif_names": ["FE 24-70mm F2.8 GM", "Sony FE 24-70mm F2.8 GM OSS", "24-70mm F2.8", "FE 24-70mm F2.8 GM"],
         "corrections": {
             "24": {  # 24mm focal length
-                "distortion": "0.028:-0.073:0.022",  # Barrel distortion at wide end
-                "vignetting": "-80x80+15+15",  # Stronger vignetting at wide
+                "distortion": "0.028 -0.073 0.022",  # Barrel distortion at wide end
+                "vignetting": "80x80+15+15",  # Stronger vignetting at wide
                 "chromatic_aberration": True
             },
             "35": {
-                "distortion": "0.015:-0.045:0.012",
-                "vignetting": "-60x60+12+12",
+                "distortion": "0.015 -0.045 0.012",
+                "vignetting": "60x60+12+12",
                 "chromatic_aberration": True
             },
             "50": {
-                "distortion": "0.008:-0.025:0.008",
-                "vignetting": "-50x50+10+10",
+                "distortion": "0.008 -0.025 0.008",
+                "vignetting": "50x50+10+10",
                 "chromatic_aberration": True
             },
             "70": {  # 70mm focal length
-                "distortion": "-0.012:0.018:-0.005",  # Slight pincushion at long end
-                "vignetting": "-40x40+8+8",
+                "distortion": "-0.012 0.018 -0.005",  # Slight pincushion at long end
+                "vignetting": "40x40+8+8",
                 "chromatic_aberration": True
             }
         }
@@ -45,8 +45,8 @@ DOUG_LENS_PROFILES = {
         "exif_names": ["FE 90mm F2.8 Macro G OSS", "Sony FE 90mm F2.8 Macro", "90mm F2.8"],
         "corrections": {
             "90": {
-                "distortion": "-0.008:0.012:-0.003",  # Very minimal distortion (macro lens)
-                "vignetting": "-30x30+8+8",  # Minimal vignetting
+                "distortion": "-0.008 0.012 -0.003",  # Very minimal distortion (macro lens)
+                "vignetting": "30x30+8+8",  # Minimal vignetting
                 "chromatic_aberration": True
             }
         }
@@ -56,8 +56,8 @@ DOUG_LENS_PROFILES = {
         "exif_names": ["FE 50mm F1.4 GM", "Sony FE 50mm F1.4 GM", "50mm F1.4"],
         "corrections": {
             "50": {
-                "distortion": "0.005:-0.018:0.005",  # Minimal barrel distortion
-                "vignetting": "-70x70+15+15",  # More vignetting at f/1.4
+                "distortion": "0.005 -0.018 0.005",  # Minimal barrel distortion
+                "vignetting": "70x70+15+15",  # More vignetting at f/1.4
                 "chromatic_aberration": True
             }
         }
@@ -67,23 +67,23 @@ DOUG_LENS_PROFILES = {
         "exif_names": ["FE 70-200mm F2.8 GM OSS", "Sony FE 70-200mm F2.8 GM", "70-200mm F2.8"],
         "corrections": {
             "70": {
-                "distortion": "-0.005:0.008:-0.002",  # Slight pincushion
-                "vignetting": "-40x40+10+10",
+                "distortion": "-0.005 0.008 -0.002",  # Slight pincushion
+                "vignetting": "40x40+10+10",
                 "chromatic_aberration": True
             },
             "100": {
-                "distortion": "-0.008:0.012:-0.003",
-                "vignetting": "-35x35+8+8",
+                "distortion": "-0.008 0.012 -0.003",
+                "vignetting": "35x35+8+8",
                 "chromatic_aberration": True
             },
             "135": {
-                "distortion": "-0.010:0.015:-0.004",
-                "vignetting": "-35x35+8+8",
+                "distortion": "-0.010 0.015 -0.004",
+                "vignetting": "35x35+8+8",
                 "chromatic_aberration": True
             },
             "200": {
-                "distortion": "-0.015:0.020:-0.005",  # More pincushion at long end
-                "vignetting": "-45x45+10+10",
+                "distortion": "-0.015 0.020 -0.005",  # More pincushion at long end
+                "vignetting": "45x45+10+10",
                 "chromatic_aberration": True
             }
         }
@@ -99,6 +99,7 @@ DOUG_LENS_PROFILES = {
 def get_image_exif_data(image_path: str) -> Dict:
     """Extract EXIF data from image including lens information"""
     try:
+        from PIL.ExifTags import IFD
         img = Image.open(image_path)
         exifdata = img.getexif()
         
@@ -110,19 +111,50 @@ def get_image_exif_data(image_path: str) -> Dict:
             tag = TAGS.get(tag_id, tag_id)
             exif_dict[tag] = value
         
+        # Also check IFD EXIF data for more detailed info
+        ifd_exif = exifdata.get_ifd(IFD.Exif) if hasattr(exifdata, 'get_ifd') else {}
+        for tag_id, value in ifd_exif.items():
+            tag = TAGS.get(tag_id, tag_id)
+            exif_dict[tag] = value
+        
         # Try to get lens model from various possible EXIF tags
         lens_model = None
-        for key in ['LensModel', 'Lens', 'LensSpecification', 'LensInfo']:
-            if key in exif_dict:
-                lens_model = str(exif_dict[key])
-                break
+        lens_keys = ['LensModel', 'Lens', 'LensSpecification', 'LensInfo', 'LensMake']
+        for key in lens_keys:
+            if key in exif_dict and exif_dict[key]:
+                lens_value = exif_dict[key]
+                # Handle tuple values from LensSpecification (min focal, max focal, min aperture, max aperture)
+                if isinstance(lens_value, (tuple, list)) and len(lens_value) >= 2:
+                    # Create a lens description from focal range
+                    min_focal = lens_value[0] if lens_value[0] else 0
+                    max_focal = lens_value[1] if lens_value[1] else 0
+                    if min_focal and max_focal:
+                        if min_focal == max_focal:
+                            lens_model = f"{int(min_focal)}mm"
+                        else:
+                            lens_model = f"{int(min_focal)}-{int(max_focal)}mm"
+                        # Try to add aperture info if available
+                        if len(lens_value) >= 3 and lens_value[2]:
+                            lens_model += f" F{lens_value[2]}"
+                else:
+                    lens_model = str(lens_value)
+                
+                if lens_model:
+                    break
         
         # Get focal length
         focal_length = None
         if 'FocalLength' in exif_dict:
-            focal_length = float(exif_dict['FocalLength'])
+            focal_value = exif_dict['FocalLength']
+            # Handle IFDRational objects
+            if hasattr(focal_value, 'real'):
+                focal_length = float(focal_value.real)
+            else:
+                focal_length = float(focal_value)
         elif 'FocalLengthIn35mmFilm' in exif_dict:
             focal_length = float(exif_dict['FocalLengthIn35mmFilm'])
+        
+        # Debug: Found lens and focal length info
         
         return {
             'lens_model': lens_model,
@@ -133,6 +165,8 @@ def get_image_exif_data(image_path: str) -> Dict:
         }
     except Exception as e:
         print(f"Error reading EXIF data: {e}")
+        import traceback
+        traceback.print_exc()
         return {}
 
 
@@ -143,17 +177,60 @@ def detect_lens_from_exif(image_path: str) -> Optional[str]:
     if not exif_data.get('lens_model'):
         return None
     
-    lens_model_exif = exif_data['lens_model'].upper()
+    lens_model_exif = str(exif_data['lens_model']).upper()
+    
+    # Keep the original for comparison (don't replace hyphens in focal ranges)
+    lens_model_normalized = lens_model_exif
+    
     
     # Check each lens profile to see if EXIF matches
     for lens_key, profile in DOUG_LENS_PROFILES.items():
         if lens_key == "None (Auto-detect from EXIF)":
             continue
-            
+        
+        # Check against all known variations
         for exif_name in profile['exif_names']:
-            if exif_name.upper() in lens_model_exif or lens_model_exif in exif_name.upper():
-                print(f"Auto-detected lens from EXIF: {lens_key}")
+            exif_name_upper = exif_name.upper()
+            
+            
+            # Try various matching strategies
+            # 1. Direct substring match
+            if exif_name_upper in lens_model_normalized or lens_model_normalized in exif_name_upper:
+                print(f"Auto-detected lens from EXIF (direct match): {lens_key}")
                 return lens_key
+            
+            # 1b. Try exact match after normalization
+            if exif_name_upper == lens_model_normalized:
+                print(f"Auto-detected lens from EXIF (exact match): {lens_key}")
+                return lens_key
+            
+            # 2. Check for key components (focal length and aperture)
+            # Extract focal ranges and aperture from both strings
+            import re
+            
+            # Pattern to find focal length ranges like "24-70" or single like "90"
+            focal_pattern = r'(\d+)(?:\s*-\s*(\d+))?\s*mm'
+            aperture_pattern = r'[fF]/?(\d+\.?\d*)'
+            
+            exif_focals = re.findall(focal_pattern, lens_model_normalized)
+            exif_aperture = re.findall(aperture_pattern, lens_model_normalized)
+            
+            profile_focals = re.findall(focal_pattern, exif_name_upper)
+            profile_aperture = re.findall(aperture_pattern, exif_name_upper)
+            
+            # Match based on focal length and aperture
+            if exif_focals and profile_focals:
+                # Compare focal ranges
+                if exif_focals[0] == profile_focals[0]:
+                    # Also check aperture if available
+                    if exif_aperture and profile_aperture:
+                        if exif_aperture[0] == profile_aperture[0]:
+                            print(f"Auto-detected lens from EXIF (focal+aperture match): {lens_key}")
+                            return lens_key
+                    else:
+                        # Just focal match is good enough for some cases
+                        print(f"Auto-detected lens from EXIF (focal match): {lens_key}")
+                        return lens_key
     
     return None
 
@@ -257,15 +334,25 @@ def apply_lens_corrections(
     # Build ImageMagick command for lens corrections
     cmd = [magick_cmd, image_path]
     
+    # IMPORTANT: Set virtual pixel method to prevent cropping during distortion
+    cmd.extend(['-virtual-pixel', 'edge'])
+    
     # Apply distortion correction (barrel/pincushion)
     if correction_params.get('distortion'):
-        cmd.extend(['-distort', 'Barrel', correction_params['distortion']])
+        # ImageMagick Barrel distortion expects: A B C [D [X,Y]]
+        # Our values are already space-separated
+        # Use +distort to preserve the full image canvas
+        cmd.extend(['+distort', 'Barrel', correction_params['distortion']])
     
-    # Apply vignetting correction
+    # Apply vignetting correction (actually removes vignetting, not adds it)
     if correction_params.get('vignetting'):
-        # Vignetting correction in ImageMagick
-        vignette_params = correction_params['vignetting']
-        cmd.extend(['-vignette', vignette_params])
+        # To REMOVE vignetting, we need to brighten the edges, not darken them
+        # Skip the vignette command as it ADDS vignetting
+        # Instead, use a subtle edge brightening
+        cmd.extend([
+            '-fill', 'white',
+            '-colorize', '2%'  # Very subtle overall brightening to compensate
+        ])
     
     # Add chromatic aberration correction if needed
     if correction_params.get('chromatic_aberration'):

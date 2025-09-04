@@ -115,16 +115,15 @@ async def enhanced_analysis_agent(image_path: str, custom_instructions: Optional
     - **Lens Distortion**: Barrel distortion, pincushion distortion, vignetting, chromatic aberration
     - **Surface Materials**: Chrome, stainless steel, matte surfaces, glass, plastic
     - **Lighting Issues**: Harsh shadows, overexposure, uneven lighting, color casts
+    - **Dust and Sensor Debris**: Visible dust spots, sensor debris, dirt on surfaces
     - **Complex Problems**: Artifacts, unwanted objects, background issues
     - **Color Quality**: Saturation, vibrancy, accuracy needs
     
     **GEMINI EDITING** is best for:
-    - Lens corrections (barrel/pincushion distortion, vignetting, chromatic aberration)
     - Complex lighting corrections and color casts
     - Selective object editing (enhance chrome without affecting other areas)
     - Background modifications and artifact removal
-    - Material-specific enhancements (making steel look more realistic)
-    - Removing unwanted reflections or objects
+    - Dust and sensor debris removal
     - Advanced color correction
     
     **IMAGEMAGICK** is sufficient for:
@@ -132,6 +131,12 @@ async def enhanced_analysis_agent(image_path: str, custom_instructions: Optional
     - Basic color saturation changes
     - Sharpening and noise reduction
     - Straightforward optimizations
+    
+    **LENS CORRECTION POLICY**:
+    - Lens corrections (barrel/pincushion distortion, vignetting, chromatic aberration) are handled separately by the lensfun library.
+    - Do NOT include lens correction steps in gemini_instructions.
+    - ImageMagick lens corrections are fallback options only, to be used when lensfunpy is not available.
+    - You may still report lens_issues and needs_lens_correction for downstream processing by lensfun.
     
     **BACKGROUND REMOVAL POLICY**:
     - Background removal is ENABLED by default for all product photography
@@ -141,12 +146,15 @@ async def enhanced_analysis_agent(image_path: str, custom_instructions: Optional
     Return analysis as JSON with:
     - lens_issues: [detected lens distortions: barrel, pincushion, vignetting, chromatic_aberration]
     - needs_lens_correction: boolean (true if lens issues detected)
+    - lens_corrections_applied: boolean (true if lens corrections will be applied by dedicated lens correction step)
+    - dust_issues: [detected dust problems: spots, sensor_debris, surface_dirt]
+    - needs_dust_removal: boolean (true if dust issues detected)
     - surface_materials: [materials detected]
     - lighting_issues: [specific problems]
     - color_problems: [color issues]
     - complex_problems: [issues requiring AI editing]
     - editing_strategy: "gemini" or "imagemagick" or "both"
-    - gemini_instructions: string (detailed instructions for Gemini editing, if needed)
+    - gemini_instructions: string (detailed instructions for Gemini editing, exclude lens corrections)
     - imagemagick_command: string (ImageMagick parameters, if needed)
     - editing_explanation: string (why this strategy was chosen)
     - remove_background: boolean (default: true, unless user explicitly says no)
@@ -170,6 +178,7 @@ async def enhanced_analysis_agent(image_path: str, custom_instructions: Optional
         response = await client.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=1200,
+            temperature=0.7,
             messages=[{
                 "role": "user",
                 "content": [
@@ -221,7 +230,8 @@ async def enhanced_analysis_agent(image_path: str, custom_instructions: Optional
                 "imagemagick_command": "-brightness-contrast 5x10 -modulate 105,110,100",
                 "editing_explanation": "Fallback to basic optimization",
                 "remove_background": True,
-                "optimization_priority": ["brightness", "contrast", "saturation"]
+                "optimization_priority": ["brightness", "contrast", "saturation"],
+                "lens_corrections_applied": False
             }
         
         # Add metadata
@@ -284,35 +294,44 @@ async def gemini_edit_agent(image_path: str, analysis: Dict[str, Any]) -> str:
         
         print(f"📊 Image size: {len(image_data)} bytes")
         
-        # Check if lens correction is needed
-        needs_lens_correction = analysis.get("needs_lens_correction", False)
-        lens_issues = analysis.get("lens_issues", [])
+        # Check if dust removal is needed
+        needs_dust_removal = analysis.get("needs_dust_removal", False)
+        dust_issues = analysis.get("dust_issues", [])
         
         # Create prompt for Gemini
-        lens_correction_text = ""
-        if needs_lens_correction and lens_issues:
-            lens_correction_text = f"""
-        IMPORTANT - Apply Lens Corrections for the following detected issues:
-        {', '.join(lens_issues)}
+        dust_removal_text = ""
+        if needs_dust_removal and dust_issues:
+            dust_removal_text = f"""
+        IMPORTANT - Remove Visible Dust and Sensor Debris:
+        Detected issues: {", ".join(dust_issues)}
         
-        Lens Correction Guidelines:
-        - Correct barrel or pincushion distortion to straighten curved lines
-        - Remove vignetting (dark corners) for even illumination
-        - Fix chromatic aberration (color fringing) around edges
-        - Ensure straight lines remain straight after correction
-        - Maintain natural perspective while removing lens artifacts
+        Dust Removal Guidelines:
+        - Carefully remove dust spots and sensor debris without affecting product details
+        - Clean surface dirt while preserving material textures
+        - Ensure dust removal does not blur important product features
+        - Focus on maintaining sharpness while removing debris
         """
         
         edit_prompt = f"""
         You are a professional product photography editor. Apply these specific improvements to this image:
         
-        {lens_correction_text}
+        CRITICAL REQUIREMENT: You MUST preserve the ENTIRE image frame and dimensions. 
+        DO NOT crop, trim, or remove ANY part of the image. 
+        The output image MUST have the exact same dimensions and show ALL content from edge to edge.
+        Return the COMPLETE, FULL IMAGE with all parts visible, including:
+        - The entire top portion
+        - The complete bottom portion including base/feet/stand
+        - Full left and right sides
+        - All edges and corners
+        
+        {dust_removal_text}
         
         {gemini_instructions}
         
         Focus on creating commercial-quality product photography suitable for e-commerce.
         Maintain product authenticity while enhancing visual appeal.
         Preserve important details while improving overall quality.
+        REMINDER: Return the FULL, UNCROPPED image with identical dimensions to the input.
         """
         
         print("🚀 Sending to Gemini 2.5 Flash Image Preview...")
@@ -423,26 +442,52 @@ async def imagemagick_optimization_agent(image_path: str, analysis: Dict[str, An
     
     imagemagick_command = analysis.get("imagemagick_command", "-enhance")
     
-    # Add lens correction if needed
+    # Add lens correction only as fallback if not already applied by lens correction step
     needs_lens_correction = analysis.get("needs_lens_correction", False)
     lens_issues = analysis.get("lens_issues", [])
+    lens_corrections_applied = analysis.get("lens_corrections_applied", False)
     
-    if needs_lens_correction and lens_issues:
-        # Add basic lens correction parameters
+    if needs_lens_correction and lens_issues and not lens_corrections_applied:
+        # Add basic lens correction parameters (fallback only)
         lens_corrections = []
+        # Add virtual pixel method to prevent cropping
+        lens_corrections.append("-virtual-pixel edge")
         if "barrel" in str(lens_issues).lower() or "pincushion" in str(lens_issues).lower():
-            # Basic barrel/pincushion distortion correction
-            lens_corrections.append("-distort Barrel '0.0 -0.05 0.0'")
+            # Basic barrel/pincushion distortion correction using +distort to preserve canvas
+            lens_corrections.append("+distort Barrel '0.0 -0.05 0.0'")
         if "vignetting" in str(lens_issues).lower():
-            # Remove vignetting
-            lens_corrections.append("-vignette 0x20+10+10")
+            # Skip vignette command as it ADDS vignetting, not removes it
+            # Instead use subtle brightening
+            lens_corrections.append("-fill white -colorize 2%")
         
         if lens_corrections:
             imagemagick_command = f"{imagemagick_command} {' '.join(lens_corrections)}"
             writer({
                 "agent": "imagemagick",
                 "status": "info",
-                "message": f"Adding lens corrections: {', '.join(lens_issues)}"
+                "message": f"Adding fallback lens corrections: {', '.join(lens_issues)}"
+            })
+    
+    # Add dust removal if needed
+    needs_dust_removal = analysis.get("needs_dust_removal", False)
+    dust_issues = analysis.get("dust_issues", [])
+    
+    if needs_dust_removal and dust_issues:
+        # Add basic dust removal parameters
+        dust_corrections = []
+        if "spots" in dust_issues or "sensor_debris" in dust_issues:
+            # Basic dust spot removal
+            dust_corrections.append("-statistic median 3x3")
+        if "surface_dirt" in dust_issues:
+            # Surface dirt cleanup
+            dust_corrections.append("-morphology close disk:1")
+        
+        if dust_corrections:
+            imagemagick_command = f"{imagemagick_command} {' '.join(dust_corrections)}"
+            writer({
+                "agent": "imagemagick",
+                "status": "info",
+                "message": f"Adding dust corrections: {', '.join(dust_issues)}"
             })
     
     # Generate output path
@@ -651,16 +696,21 @@ async def enhanced_qc_agent(image_path: str, original_analysis: Dict[str, Any]) 
        - ANY visible glitches, color bleeding, processing errors = FAIL
        - Pink/purple/cyan artifacts or unusual color patches = FAIL
        
-    2. **Professional Standards**:
+    2. **Dust and Debris Removal**:
+       - Check for remaining dust spots, sensor debris, or surface dirt
+       - Ensure dust removal did not blur important product details
+       - Verify that cleaning maintained material textures and sharpness
+       
+    3. **Professional Standards**:
        - Must look like professional product photography
        - Clean, sharp, commercial-grade appearance
        
-    3. **Editing Quality**:
+    4. **Editing Quality**:
        - Natural-looking results (no over-processing)
        - Preserved product authenticity
        - Enhanced without looking artificial
        
-    4. **Technical Excellence**:
+    5. **Technical Excellence**:
        - Sharp focus, proper exposure
        - Clean edges, appropriate contrast
        - Material authenticity (chrome looks like chrome)
@@ -674,6 +724,7 @@ async def enhanced_qc_agent(image_path: str, original_analysis: Dict[str, Any]) 
     - passed: boolean (true if score 9+ AND no artifacts)
     - quality_score: number (0-10, be strict)
     - issues_found: [specific problems]
+    - dust_removal_quality: string (excellent, good, fair, poor)
     - needs_imagemagick_fallback: boolean (recommend ImageMagick as backup)
     - imagemagick_suggestions: string (specific ImageMagick commands to try)
     - final_assessment: string (detailed explanation)
