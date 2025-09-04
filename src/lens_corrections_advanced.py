@@ -420,6 +420,8 @@ def apply_imagemagick_corrections(image_path: str, output_path: str, correction_
         magick_cmd = get_imagemagick_command()
         
         if not magick_cmd:
+            print("⚠️ ImageMagick not found - lens corrections cannot be applied")
+            print("  To enable lens corrections, ImageMagick must be installed on the system")
             return False
         
         # Build ImageMagick command
@@ -453,6 +455,9 @@ def apply_imagemagick_corrections(image_path: str, output_path: str, correction_
         cmd.append(output_path)
         
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        if result.returncode != 0:
+            print(f"⚠️ ImageMagick lens correction failed with error:")
+            print(f"  {result.stderr}")
         return result.returncode == 0
         
     except Exception as e:
@@ -563,9 +568,15 @@ def apply_lens_corrections(
     import shutil
     shutil.copy2(image_path, output_path)
     
+    reason = 'No lens corrections available or applicable'
+    if lens_to_use:
+        reason = f'Lens detected ({lens_to_use}) but ImageMagick not available for corrections'
+    
+    print(f"⚠️ {reason}")
+    
     return {
         'corrections_applied': False,
-        'reason': 'No lens corrections available or applicable',
+        'reason': reason,
         'lens_used': lens_to_use,
         'detected_from_exif': detected_from_exif,
         'focal_length': focal_length
