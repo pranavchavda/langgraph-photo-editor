@@ -8,6 +8,8 @@ pillow>=10.0.0
 click>=8.0.0
 rich>=13.0.0
 python-dotenv>=1.0.0
+streamlit>=1.28.0
+streamlit-local-storage>=0.0.5
 
 # Optional but recommended for advanced lens corrections
 # Note: lensfunpy requires system libraries (lensfun)
