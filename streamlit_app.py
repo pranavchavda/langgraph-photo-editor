@@ -15,8 +15,9 @@ import streamlit.components.v1 as components
 import zipfile
 import io
 
-# Import our existing workflow
+# Import our existing workflow and lens corrections
 from src.workflow_enhanced import process_single_image_enhanced
+from src.lens_corrections import get_lens_options, apply_lens_corrections, get_focal_length_options
 
 # Page config
 st.set_page_config(
@@ -170,6 +171,27 @@ with st.sidebar:
     use_gemini = st.checkbox("Use Gemini 2.5 Flash", value=True)
     remove_background = st.checkbox("Remove Background", value=False)
     
+    st.subheader("📷 Lens Corrections")
+    lens_options = get_lens_options()
+    selected_lens = st.selectbox(
+        "Select lens used (or auto-detect):",
+        lens_options,
+        index=len(lens_options) - 1,  # Default to auto-detect
+        help="Select your Sony lens for automatic corrections like Lightroom"
+    )
+    
+    # Show focal length selector for zoom lenses
+    focal_length = None
+    if selected_lens and "mm F" in selected_lens and "-" in selected_lens:
+        # It's a zoom lens, show focal length options
+        focal_options = get_focal_length_options(selected_lens)
+        if focal_options:
+            focal_length = st.select_slider(
+                "Focal length used:",
+                options=focal_options,
+                value=focal_options[len(focal_options)//2]  # Default to middle
+            )
+    
     st.info("💡 Tip: API keys are saved in your browser and persist across sessions")
     
     with st.expander("🔑 How to get API keys"):
@@ -242,12 +264,31 @@ if mode == "🖼️ Single Image":
         if st.session_state.processed_image is not None:
             st.image(st.session_state.processed_image, caption="Enhanced Image", use_container_width=True)
             
+            # Prominent download button with custom styling
+            st.markdown("""
+            <style>
+            .download-section > div > button {
+                background-color: #4CAF50 !important;
+                color: white !important;
+                font-size: 18px !important;
+                font-weight: bold !important;
+                padding: 12px !important;
+                border-radius: 8px !important;
+                margin-top: 10px !important;
+                margin-bottom: 10px !important;
+            }
+            </style>
+            """, unsafe_allow_html=True)
+            
+            st.markdown('<div class="download-section">', unsafe_allow_html=True)
             st.download_button(
-                label="⬇️ Download Enhanced Image",
+                label="💾 ⬇️ DOWNLOAD ENHANCED IMAGE ⬇️ 💾",
                 data=st.session_state.processed_image_data,
                 file_name=st.session_state.processed_filename,
-                mime="image/webp"
+                mime="image/webp",
+                use_container_width=True
             )
+            st.markdown('</div>', unsafe_allow_html=True)
             
             if st.session_state.processing_metrics:
                 st.subheader("📊 Processing Metrics")
@@ -275,8 +316,24 @@ if mode == "🖼️ Single Image":
                             with open(input_path, "wb") as f:
                                 f.write(uploaded_file.getbuffer())
                             
+                            # Apply lens corrections first if applicable
+                            corrected_path = str(Path(temp_dir) / f"corrected_{uploaded_file.name}")
+                            lens_result = apply_lens_corrections(
+                                str(input_path),
+                                corrected_path,
+                                selected_lens=selected_lens if selected_lens != "None (Auto-detect from EXIF)" else None,
+                                focal_length=float(focal_length.replace('mm', '')) if focal_length else None
+                            )
+                            
+                            # Use corrected image if corrections were applied
+                            if lens_result.get('corrections_applied'):
+                                st.info(f"📷 Applied lens corrections: {lens_result.get('message', '')}")
+                                process_path = corrected_path
+                            else:
+                                process_path = str(input_path)
+                            
                             result = asyncio.run(process_single_image_enhanced(
-                                image_path=str(input_path),
+                                image_path=process_path,
                                 custom_instructions=instructions,
                                 output_dir=temp_dir
                             ))
@@ -339,24 +396,49 @@ else:  # mode == "📦 Batch Processing"
             st.info(f"...and {len(uploaded_files) - 5} more images")
         
         # Batch settings
-        col1, col2 = st.columns(2)
+        st.subheader("⚙️ Batch Settings")
+        col1, col2, col3 = st.columns(3)
+        
         with col1:
-            st.subheader("✏️ Batch Instructions")
-            batch_instructions = st.text_area(
-                "Enter editing instructions (applied to all images):",
-                value="Enhance the product photo for e-commerce. Make it more vibrant and professional.",
-                height=100
+            batch_lens = st.selectbox(
+                "Lens used for all images:",
+                get_lens_options(),
+                index=len(get_lens_options()) - 1,  # Default to auto-detect
+                key="batch_lens",
+                help="Apply same lens corrections to all images"
             )
+            # Show focal length for zoom lenses
+            batch_focal = None
+            if batch_lens and "mm F" in batch_lens and "-" in batch_lens:
+                focal_opts = get_focal_length_options(batch_lens)
+                if focal_opts:
+                    batch_focal = st.select_slider(
+                        "Focal length:",
+                        options=focal_opts,
+                        value=focal_opts[len(focal_opts)//2],
+                        key="batch_focal"
+                    )
         
         with col2:
-            st.subheader("⚙️ Batch Settings")
             max_concurrent = st.slider(
                 "Concurrent Processing",
                 min_value=1,
                 max_value=5,
                 value=2,
-                help="Process multiple images at once (higher = faster but uses more resources)"
+                help="Process multiple images at once"
             )
+        
+        with col3:
+            st.metric("Total Images", len(uploaded_files))
+            estimated_time = (len(uploaded_files) / max_concurrent) * 30  # ~30s per image
+            st.caption(f"Est. time: {int(estimated_time)}s")
+        
+        st.subheader("✏️ Batch Instructions")
+        batch_instructions = st.text_area(
+            "Enter editing instructions (applied to all images):",
+            value="Enhance the product photo for e-commerce. Make it more vibrant and professional.",
+            height=100
+        )
         
         process_batch_button = st.button("🚀 Process All Images", type="primary", use_container_width=True)
         
@@ -388,8 +470,20 @@ else:  # mode == "📦 Batch Processing"
                             
                             status_text.text(f"Processing {file.name} ({idx + 1}/{total})...")
                             
+                            # Apply lens corrections first
+                            corrected_path = str(Path(temp_dir) / f"corrected_{idx}_{file.name}")
+                            lens_result = apply_lens_corrections(
+                                str(input_path),
+                                corrected_path,
+                                selected_lens=batch_lens if batch_lens != "None (Auto-detect from EXIF)" else None,
+                                focal_length=float(batch_focal.replace('mm', '')) if batch_focal else None
+                            )
+                            
+                            # Use corrected image if corrections were applied
+                            process_path = corrected_path if lens_result.get('corrections_applied') else str(input_path)
+                            
                             result = await process_single_image_enhanced(
-                                image_path=str(input_path),
+                                image_path=process_path,
                                 custom_instructions=batch_instructions,
                                 output_dir=temp_dir
                             )
@@ -453,8 +547,11 @@ else:  # mode == "📦 Batch Processing"
                         st.metric("Failed", len(failed))
                     
                     if successful:
-                        st.subheader("📦 Download Results")
+                        # Make the download section very prominent
+                        st.markdown("---")
+                        st.markdown("<h1 style='text-align: center; color: #4CAF50;'>🎉 Your Images Are Ready!</h1>", unsafe_allow_html=True)
                         
+                        # Create ZIP file
                         zip_buffer = io.BytesIO()
                         with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
                             for result in successful:
@@ -464,13 +561,48 @@ else:  # mode == "📦 Batch Processing"
                         
                         zip_buffer.seek(0)
                         
-                        st.download_button(
-                            label="⬇️ Download All Enhanced Images (ZIP)",
-                            data=zip_buffer,
-                            file_name=f"enhanced_photos_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
-                            mime="application/zip",
-                            use_container_width=True
-                        )
+                        # Large prominent download section
+                        col1, col2, col3 = st.columns([1, 3, 1])
+                        with col2:
+                            # Custom CSS for the big button
+                            st.markdown("""
+                            <style>
+                            .big-download-button > button {
+                                background-color: #4CAF50 !important;
+                                color: white !important;
+                                font-size: 24px !important;
+                                font-weight: bold !important;
+                                padding: 20px !important;
+                                border-radius: 10px !important;
+                                border: 3px solid #45a049 !important;
+                                box-shadow: 0 4px 8px rgba(0,0,0,0.2) !important;
+                                transition: all 0.3s !important;
+                            }
+                            .big-download-button > button:hover {
+                                background-color: #45a049 !important;
+                                box-shadow: 0 8px 16px rgba(0,0,0,0.3) !important;
+                                transform: translateY(-2px) !important;
+                            }
+                            </style>
+                            """, unsafe_allow_html=True)
+                            
+                            # The big download button
+                            st.markdown('<div class="big-download-button">', unsafe_allow_html=True)
+                            st.download_button(
+                                label="📦⬇️ DOWNLOAD ALL IMAGES (ZIP) ⬇️📦",
+                                data=zip_buffer,
+                                file_name=f"enhanced_photos_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+                                mime="application/zip",
+                                use_container_width=True,
+                                key="big_download_btn"
+                            )
+                            st.markdown('</div>', unsafe_allow_html=True)
+                            
+                            # Additional helpful info
+                            st.success(f"✅ {len(successful)} images ready for download")
+                            st.info(f"💾 File size: ~{len(zip_buffer.getvalue()) / 1024 / 1024:.1f} MB")
+                        
+                        st.markdown("---")
                         
                         st.subheader("✅ Successfully Processed Images")
                         cols_per_row = 3

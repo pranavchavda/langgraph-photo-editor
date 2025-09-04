@@ -112,12 +112,14 @@ async def enhanced_analysis_agent(image_path: str, custom_instructions: Optional
     2. **ImageMagick** - Traditional optimization for simple adjustments
     
     Evaluate the image for:
+    - **Lens Distortion**: Barrel distortion, pincushion distortion, vignetting, chromatic aberration
     - **Surface Materials**: Chrome, stainless steel, matte surfaces, glass, plastic
     - **Lighting Issues**: Harsh shadows, overexposure, uneven lighting, color casts
     - **Complex Problems**: Artifacts, unwanted objects, background issues
     - **Color Quality**: Saturation, vibrancy, accuracy needs
     
     **GEMINI EDITING** is best for:
+    - Lens corrections (barrel/pincushion distortion, vignetting, chromatic aberration)
     - Complex lighting corrections and color casts
     - Selective object editing (enhance chrome without affecting other areas)
     - Background modifications and artifact removal
@@ -137,6 +139,8 @@ async def enhanced_analysis_agent(image_path: str, custom_instructions: Optional
     - For e-commerce and product photos, transparent backgrounds are preferred
     
     Return analysis as JSON with:
+    - lens_issues: [detected lens distortions: barrel, pincushion, vignetting, chromatic_aberration]
+    - needs_lens_correction: boolean (true if lens issues detected)
     - surface_materials: [materials detected]
     - lighting_issues: [specific problems]
     - color_problems: [color issues]
@@ -280,9 +284,29 @@ async def gemini_edit_agent(image_path: str, analysis: Dict[str, Any]) -> str:
         
         print(f"📊 Image size: {len(image_data)} bytes")
         
+        # Check if lens correction is needed
+        needs_lens_correction = analysis.get("needs_lens_correction", False)
+        lens_issues = analysis.get("lens_issues", [])
+        
         # Create prompt for Gemini
+        lens_correction_text = ""
+        if needs_lens_correction and lens_issues:
+            lens_correction_text = f"""
+        IMPORTANT - Apply Lens Corrections for the following detected issues:
+        {', '.join(lens_issues)}
+        
+        Lens Correction Guidelines:
+        - Correct barrel or pincushion distortion to straighten curved lines
+        - Remove vignetting (dark corners) for even illumination
+        - Fix chromatic aberration (color fringing) around edges
+        - Ensure straight lines remain straight after correction
+        - Maintain natural perspective while removing lens artifacts
+        """
+        
         edit_prompt = f"""
         You are a professional product photography editor. Apply these specific improvements to this image:
+        
+        {lens_correction_text}
         
         {gemini_instructions}
         
@@ -398,6 +422,28 @@ async def imagemagick_optimization_agent(image_path: str, analysis: Dict[str, An
     })
     
     imagemagick_command = analysis.get("imagemagick_command", "-enhance")
+    
+    # Add lens correction if needed
+    needs_lens_correction = analysis.get("needs_lens_correction", False)
+    lens_issues = analysis.get("lens_issues", [])
+    
+    if needs_lens_correction and lens_issues:
+        # Add basic lens correction parameters
+        lens_corrections = []
+        if "barrel" in str(lens_issues).lower() or "pincushion" in str(lens_issues).lower():
+            # Basic barrel/pincushion distortion correction
+            lens_corrections.append("-distort Barrel '0.0 -0.05 0.0'")
+        if "vignetting" in str(lens_issues).lower():
+            # Remove vignetting
+            lens_corrections.append("-vignette 0x20+10+10")
+        
+        if lens_corrections:
+            imagemagick_command = f"{imagemagick_command} {' '.join(lens_corrections)}"
+            writer({
+                "agent": "imagemagick",
+                "status": "info",
+                "message": f"Adding lens corrections: {', '.join(lens_issues)}"
+            })
     
     # Generate output path
     output_path = str(Path(image_path).parent / f"{Path(image_path).stem}-optimized.webp")
