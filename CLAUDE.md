@@ -152,10 +152,28 @@ QUALITY_THRESHOLD=0.8                         # Minimum QC score
 - Each agent can be tested independently via debug scripts
 - Full workflow testing through `test_enhanced.py`
 
+## Lens Correction System
+
+**Supported Lenses (Doug's Kit):**
+- Sony FE 24-70mm F2.8 GM (zoom lens with focal-length-specific corrections)
+- Sony FE 90mm F2.8 Macro G OSS
+- Sony FE 50mm F1.4 GM  
+- Sony FE 70-200mm F2.8 GM OSS (zoom lens with focal-length-specific corrections)
+
+**Implementation:**
+- Primary: ImageMagick with custom profiles using `+distort Barrel` for distortion correction
+- Fallback: Gemini AI for lens issues when ImageMagick unavailable
+- lensfunpy disabled: Too aggressive for JPEGs, causes severe cropping
+
+**Key Files:**
+- `src/lens_corrections_advanced.py` - Main lens correction logic with EXIF detection
+- `src/lens_corrections.py` - Original implementation with Doug's lens profiles
+- `packages.txt` - Ensures ImageMagick installation on Streamlit Cloud
+
 ## Dependencies
 
 **System Requirements:**
-- ImageMagick (must be installed and accessible via command line)
+- ImageMagick (installed via packages.txt on Streamlit Cloud)
 - Python 3.9+
 
 **Key Python Packages:**
@@ -168,6 +186,16 @@ QUALITY_THRESHOLD=0.8                         # Minimum QC score
 - `pillow>=10.0.0` - Image format handling
 
 ## Recent Improvements (Latest)
+
+**Lens Correction & Deployment Fixes (September 4, 2025):**
+- ✅ **Fixed severe image cropping during lens correction**: lensfunpy was cropping 1/3 of image due to aggressive geometry distortion
+- ✅ **ImageMagick lens correction improvements**: Changed from `-distort` to `+distort` to preserve full canvas
+- ✅ **Fixed vignetting**: Removed `-vignette` command that was adding instead of removing vignettes  
+- ✅ **localStorage persistence working**: Implemented with streamlit-local-storage package, keys persist across sessions
+- ✅ **ImageMagick on Streamlit Cloud**: Added packages.txt for system-level ImageMagick installation
+- ✅ **Better error logging**: Clear messages when lens corrections can't be applied
+- ✅ **EXIF lens detection working**: Properly detects all 4 Sony FE lenses from Doug's kit
+- ✅ **Lens correction profiles**: Custom profiles for Sony FE 24-70mm, 90mm Macro, 50mm, 70-200mm
 
 **Streamlit Web App & Deployment Fixes (September 3, 2025):**
 - ✅ **Created Streamlit web interface**: Full-featured web app for Doug, avoiding macOS compatibility issues
