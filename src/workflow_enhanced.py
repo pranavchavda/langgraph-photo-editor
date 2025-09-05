@@ -29,6 +29,15 @@ try:
 except ImportError:
     LENS_CORRECTIONS_AVAILABLE = False
 
+# Try to import Wand-based agents
+try:
+    from .wand_optimization_agent import wand_optimization_agent, smart_crop_agent
+    WAND_AVAILABLE = True
+except ImportError:
+    WAND_AVAILABLE = False
+    wand_optimization_agent = imagemagick_optimization_agent  # Fallback
+    smart_crop_agent = None
+
 
 def finalize_output_with_quality_and_cleanup(
     current_path: str, 
@@ -222,7 +231,28 @@ async def enhanced_agentic_processor(
         # Initialize current_image to track the working image path
         current_image = image_path
         
-        # 🔍 Stage 2: Lens Correction (if needed)
+        # ✂️ Stage 2: Smart Cropping (if needed)
+        if smart_crop_agent and analysis.get("needs_cropping", False):
+            writer({
+                "stage": "smart_cropping",
+                "message": "Analyzing and applying smart crop"
+            })
+            try:
+                cropped_path, crop_info = await smart_crop_agent(current_image, analysis)
+                if crop_info.get("cropped", False):
+                    current_image = cropped_path
+                    intermediate_files.append(cropped_path)
+                    writer({
+                        "stage": "crop_complete",
+                        "message": f"Cropped image: {crop_info.get('reduction', 'N/A')} reduction"
+                    })
+            except Exception as e:
+                writer({
+                    "stage": "crop_skipped",
+                    "message": f"Cropping failed, continuing: {str(e)}"
+                })
+        
+        # 🔍 Stage 3: Lens Correction (if needed)
         lens_corrected_path = None
         needs_lens_correction = analysis.get("needs_lens_correction", False)
         lens_issues = analysis.get("lens_issues", [])
@@ -264,14 +294,18 @@ async def enhanced_agentic_processor(
                 # Force ImageMagick fallback
                 editing_strategy = "imagemagick"
         
-        # ⚡ Stage 4: ImageMagick Optimization (only if Gemini wasn't used)
+        # ⚡ Stage 5: ImageMagick Optimization (only if Gemini wasn't used)
         imagemagick_optimized_path = None
         if editing_strategy == "imagemagick":
             writer({
                 "stage": "imagemagick_optimization", 
-                "message": "Applying ImageMagick optimizations"
+                "message": "Applying ImageMagick optimizations" + (" via Wand" if WAND_AVAILABLE else "")
             })
-            imagemagick_optimized_path = await run_imagemagick_agent(current_image, analysis)
+            # Use Wand agent if available, otherwise fall back to subprocess
+            if WAND_AVAILABLE:
+                imagemagick_optimized_path = await wand_optimization_agent(current_image, analysis)
+            else:
+                imagemagick_optimized_path = await run_imagemagick_agent(current_image, analysis)
             current_image = imagemagick_optimized_path
         elif editing_strategy == "both":
             writer({

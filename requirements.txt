@@ -18,3 +18,6 @@ streamlit-local-storage>=0.0.5
 # Then: pip install lensfunpy
 # lensfunpy>=1.13.0
 scipy>=1.11.0  # Required for advanced image processing in lens corrections
+opencv-python>=4.8.0  # For advanced image processing in Python agent
+opencv-contrib-python>=4.8.0  # Additional OpenCV modules for white balance
+Wand>=0.6.11  # Python bindings for ImageMagick

@@ -159,10 +159,15 @@ async def enhanced_analysis_agent(image_path: str, custom_instructions: Optional
     - editing_explanation: string (why this strategy was chosen)
     - remove_background: boolean (default: true, unless user explicitly says no)
     - optimization_priority: [ordered list of what to focus on]
+    - needs_cropping: boolean (true if composition could be improved by cropping)
+    - crop_suggestion: "auto" or dict with {left, top, width, height} or null
     """
     
     # Add custom instructions
     if custom_instructions:
+        # Check if user wants to skip Gemini
+        skip_gemini = "skip gemini" in custom_instructions.lower()
+        
         analysis_prompt += f"""
         
     **CUSTOM USER INSTRUCTIONS**: {custom_instructions}
@@ -171,6 +176,12 @@ async def enhanced_analysis_agent(image_path: str, custom_instructions: Optional
     - If user wants specific styles, use Gemini for complex styling
     - If user wants simple adjustments, ImageMagick may be sufficient
     - Always prioritize user intent in your strategy choice
+    """
+        
+        if skip_gemini:
+            analysis_prompt += """
+    **IMPORTANT**: User explicitly requested to skip Gemini. 
+    Set editing_strategy to "imagemagick" only, never "gemini" or "both".
     """
     
     try:
@@ -382,19 +393,47 @@ async def gemini_edit_agent(image_path: str, analysis: Dict[str, Any]) -> str:
                                 else:
                                     print("⚠️  Unknown image format, saving anyway")
                             
-                            print(f"💾 Saving edited image ({len(image_data)} bytes)...")
-                            with open(output_path, 'wb') as f:
-                                bytes_written = f.write(image_data)
-                                f.flush()
+                            print(f"💾 Processing edited image ({len(image_data)} bytes)...")
+                            
+                            # Load the edited image to check resolution
+                            from PIL import Image
+                            import io
+                            edited_img = Image.open(io.BytesIO(image_data))
+                            edited_width, edited_height = edited_img.size
+                            
+                            # Load original to get target resolution
+                            original_img = Image.open(image_path)
+                            original_width, original_height = original_img.size
+                            
+                            print(f"📐 Gemini output: {edited_width}x{edited_height}, Original: {original_width}x{original_height}")
+                            
+                            # Check if upscaling is needed (if resolution dropped by more than 10%)
+                            if edited_width < original_width * 0.9 or edited_height < original_height * 0.9:
+                                print(f"⬆️ Upscaling from {edited_width}x{edited_height} to {original_width}x{original_height}")
+                                
+                                # Use high-quality Lanczos resampling for upscaling
+                                edited_img = edited_img.resize(
+                                    (original_width, original_height), 
+                                    Image.Resampling.LANCZOS
+                                )
+                                
+                                # Apply unsharp mask to improve quality after upscaling
+                                from PIL import ImageFilter
+                                edited_img = edited_img.filter(ImageFilter.UnsharpMask(radius=1, percent=50, threshold=3))
+                                
+                                print(f"✅ Upscaled to original resolution: {original_width}x{original_height}")
+                            
+                            # Save the final image
+                            edited_img.save(output_path, 'WEBP', quality=95)
                             
                             # Verify the file was written correctly
                             import os
                             actual_file_size = os.path.getsize(output_path)
-                            if actual_file_size == len(image_data):
-                                print(f"✅ Successfully saved: {Path(output_path).name}")
+                            if actual_file_size > 0:
+                                print(f"✅ Successfully saved: {Path(output_path).name} ({actual_file_size:,} bytes)")
                                 image_saved = True
                             else:
-                                print(f"❌ File size mismatch: expected {len(image_data)}, got {actual_file_size}")
+                                print(f"❌ File write failed: file size is 0")
                                 raise Exception(f"File write verification failed")
                             break
                         except Exception as e:

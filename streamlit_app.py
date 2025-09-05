@@ -151,8 +151,9 @@ with st.sidebar:
         st.success("✅ Remove.bg key loaded")
     
     st.subheader("Processing Options")
-    use_gemini = st.checkbox("Use Gemini 2.5 Flash", value=True)
-    remove_background = st.checkbox("Remove Background", value=False)
+    use_gemini = st.checkbox("Use Gemini AI Enhancement", value=False, 
+                            help="Enable for AI-powered editing (lower resolution). Disable for traditional high-resolution processing.")
+    remove_background = st.checkbox("Remove Background", value=True)
     
     st.subheader("📷 Lens Corrections")
     lens_options = get_lens_options()
@@ -330,10 +331,15 @@ if mode == "🖼️ Single Image":
                                     st.info("📷 No lens data found in EXIF, proceeding without lens corrections")
                                 process_path = str(input_path)
                             
+                            # Add Gemini preference to instructions
+                            final_instructions = instructions
+                            if not use_gemini:
+                                final_instructions += " Skip Gemini."
+                            
                             # The workflow already handles Pregel invocation internally
                             result = asyncio.run(process_single_image_enhanced(
                                 image_path=process_path,
-                                custom_instructions=instructions,
+                                custom_instructions=final_instructions,
                                 output_dir=temp_dir
                             ))
                             
@@ -487,10 +493,15 @@ else:  # mode == "📦 Batch Processing"
                             else:
                                 process_path = str(input_path)
                             
+                            # Add Gemini preference to instructions
+                            final_batch_instructions = batch_instructions
+                            if not use_gemini:
+                                final_batch_instructions += " Skip Gemini."
+                            
                             # The workflow already handles Pregel invocation internally
                             result = await process_single_image_enhanced(
                                 image_path=process_path,
-                                custom_instructions=batch_instructions,
+                                custom_instructions=final_batch_instructions,
                                 output_dir=temp_dir
                             )
                             
