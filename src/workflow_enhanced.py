@@ -480,20 +480,20 @@ async def process_single_image_enhanced(
     # Process with enhanced workflow
     import uuid
     
-    # Check if enhanced_agentic_processor is callable or a Pregel graph
-    if callable(enhanced_agentic_processor) and not hasattr(enhanced_agentic_processor, 'ainvoke'):
-        # It's a regular function
-        result = await enhanced_agentic_processor({
-            "image_path": image_path,
-            "custom_instructions": custom_instructions
-        })
-    else:
+    # Check if enhanced_agentic_processor is a Pregel graph or callable function
+    if hasattr(enhanced_agentic_processor, 'ainvoke'):
         # It's a Pregel graph, use ainvoke
         config = {"configurable": {"thread_id": str(uuid.uuid4())}}
         result = await enhanced_agentic_processor.ainvoke({
             "image_path": image_path,
             "custom_instructions": custom_instructions
         }, config=config)
+    else:
+        # It's a regular function (shouldn't happen with @entrypoint, but just in case)
+        result = await enhanced_agentic_processor({
+            "image_path": image_path,
+            "custom_instructions": custom_instructions
+        })
     
     # Move output if different directory specified
     if output_dir and result.get("final_image"):
