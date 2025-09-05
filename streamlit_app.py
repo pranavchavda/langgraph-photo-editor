@@ -330,26 +330,12 @@ if mode == "🖼️ Single Image":
                                     st.info("📷 No lens data found in EXIF, proceeding without lens corrections")
                                 process_path = str(input_path)
                             
-                            # Handle the Pregel invocation issue
-                            try:
-                                result = asyncio.run(process_single_image_enhanced(
-                                    image_path=process_path,
-                                    custom_instructions=instructions,
-                                    output_dir=temp_dir
-                                ))
-                            except Exception as workflow_error:
-                                # Check if it's the Pregel callable error
-                                if "'Pregel' object is not callable" in str(workflow_error):
-                                    # Try direct invocation with the graph
-                                    from src.workflow_enhanced import enhanced_agentic_processor
-                                    import uuid
-                                    config = {"configurable": {"thread_id": str(uuid.uuid4())}}
-                                    result = asyncio.run(enhanced_agentic_processor.ainvoke({
-                                        "image_path": process_path,
-                                        "custom_instructions": instructions
-                                    }, config=config))
-                                else:
-                                    raise workflow_error
+                            # The workflow already handles Pregel invocation internally
+                            result = asyncio.run(process_single_image_enhanced(
+                                image_path=process_path,
+                                custom_instructions=instructions,
+                                output_dir=temp_dir
+                            ))
                             
                             if result.get("final_image"):
                                 output_path = result.get("final_image")
@@ -501,25 +487,12 @@ else:  # mode == "📦 Batch Processing"
                             else:
                                 process_path = str(input_path)
                             
-                            # Handle the Pregel invocation issue in batch mode
-                            try:
-                                result = await process_single_image_enhanced(
-                                    image_path=process_path,
-                                    custom_instructions=batch_instructions,
-                                    output_dir=temp_dir
-                                )
-                            except TypeError as e:
-                                if "'Pregel' object is not callable" in str(e):
-                                    # Direct invocation with the graph
-                                    from src.workflow_enhanced import enhanced_agentic_processor
-                                    import uuid
-                                    config = {"configurable": {"thread_id": str(uuid.uuid4())}}
-                                    result = await enhanced_agentic_processor.ainvoke({
-                                        "image_path": process_path,
-                                        "custom_instructions": batch_instructions
-                                    }, config=config)
-                                else:
-                                    raise
+                            # The workflow already handles Pregel invocation internally
+                            result = await process_single_image_enhanced(
+                                image_path=process_path,
+                                custom_instructions=batch_instructions,
+                                output_dir=temp_dir
+                            )
                             
                             if result.get("final_image"):
                                 return {
