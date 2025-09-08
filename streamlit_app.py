@@ -86,6 +86,12 @@ st.markdown("""
         border-radius: 4px;
         color: #155724;
     }
+    .help-section {
+        background-color: #f8f9fa;
+        padding: 1rem;
+        border-radius: 8px;
+        margin: 1rem 0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -257,10 +263,10 @@ with col_title:
 # Mode selector
 st.markdown("---")
 mode = st.radio(
-    "Choose Processing Mode:",
-    ["🖼️ Single Image", "📦 Batch Processing"],
+    "Choose Mode:",
+    ["🖼️ Single Image", "📦 Batch Processing", "❓ Help & Guide"],
     horizontal=True,
-    help="Single Image: Process one image at a time | Batch: Process multiple images at once"
+    help="Single Image: Process one image | Batch: Process multiple images | Help: Learn how to use the app"
 )
 
 st.markdown("---")
@@ -526,7 +532,7 @@ if mode == "🖼️ Single Image":
                         st.error(f"❌ Error: {str(e)}")
 
 # Batch Processing Mode
-else:  # mode == "📦 Batch Processing"
+elif mode == "📦 Batch Processing":
     st.header("📤 Upload Multiple Images")
     
     uploaded_files = st.file_uploader(
@@ -1012,6 +1018,259 @@ else:  # mode == "📦 Batch Processing"
                         st.subheader("❌ Failed to Process")
                         for result in failed:
                             st.error(f"**{result['original_name']}**: {result['error']}")
+
+# Help & Guide Mode
+elif mode == "❓ Help & Guide":
+    st.header("📚 Complete User Guide")
+    
+    # Quick navigation
+    st.markdown("""
+    **Quick Links:** [Getting Started](#getting-started) | [Processing Options](#processing-options) | 
+    [Tips & Tricks](#tips-tricks) | [Troubleshooting](#troubleshooting)
+    """)
+    
+    # Getting Started
+    st.subheader("🚀 Getting Started", anchor="getting-started")
+    
+    with st.expander("**Step 1: Set Up Your API Keys** (First time only)", expanded=True):
+        st.markdown("""
+        1. Look at the **left sidebar** under Settings
+        2. Enter your API keys:
+           - **Anthropic API Key** (Required) - Powers image analysis
+           - **Gemini API Key** (Required for AI) - Powers AI editing
+           - **Remove.bg API Key** (Optional) - For background removal
+        3. Click **💾 Save Keys**
+        
+        ✅ Your keys are saved in your browser and will persist across sessions!
+        """)
+    
+    with st.expander("**Step 2: Choose Your Mode**"):
+        st.markdown("""
+        - **🖼️ Single Image**: Perfect for testing settings or individual products
+        - **📦 Batch Processing**: Process multiple images with consistent settings
+        - **❓ Help & Guide**: You're here now!
+        """)
+    
+    with st.expander("**Step 3: Process Your First Image**"):
+        st.markdown("""
+        1. Switch to **Single Image** mode
+        2. Upload a product photo
+        3. Leave default settings (they're optimized for most cases)
+        4. Click **🚀 Process Image**
+        5. Download your enhanced image!
+        """)
+    
+    # Processing Options
+    st.subheader("⚙️ Processing Options Explained", anchor="processing-options")
+    
+    with st.expander("**ImageMagick Optimization** (Default: ON)"):
+        st.markdown("""
+        **What it does:** Traditional image processing - sharpening, color correction, exposure adjustment
+        
+        **When to use:**
+        - ✅ Always recommended as base enhancement
+        - ✅ Fast and reliable
+        - ✅ Gives consistent results
+        
+        **Turn OFF only if:** You want pure AI enhancement without any traditional processing
+        """)
+    
+    with st.expander("**Gemini AI Enhancement** (Default: OFF)"):
+        st.markdown("""
+        **What it does:** AI-powered editing that understands natural language instructions
+        
+        **Pros:**
+        - Can understand complex requests ("make chrome more reflective")
+        - Handles difficult edits ImageMagick can't do
+        
+        **Cons:**
+        - Slower processing
+        - Lower resolution output (1024x1024)
+        - Uses API quota
+        
+        **Best for:** Complex edits requiring AI understanding
+        """)
+    
+    with st.expander("**Chunked Gemini (High-Res AI)** 🆕"):
+        st.markdown("""
+        **What it does:** Processes large images in chunks to maintain full resolution while using AI
+        
+        **When to use:**
+        - Need AI editing AND high resolution
+        - Have time for slower processing
+        - Want best of both worlds
+        
+        **Note:** Much slower than other options
+        """)
+    
+    with st.expander("**Targeted Enhancement** 🎯"):
+        st.markdown("""
+        **What it does:** Identifies specific areas (chrome, glass, textures) and enhances them individually
+        
+        **Only available when:**
+        - ImageMagick is ON
+        - Regular Gemini is OFF
+        
+        **Best for:** Products with mixed materials needing selective enhancement
+        """)
+    
+    with st.expander("**Background Removal** (Default: ON)"):
+        st.markdown("""
+        **What it does:** Professionally removes backgrounds using Remove.bg API
+        
+        **Turn OFF for:**
+        - Lifestyle shots where you want the background
+        - Images already with transparent backgrounds
+        - Saving API quota
+        """)
+    
+    with st.expander("**Lens Corrections** (Default: OFF)"):
+        st.markdown("""
+        **What it does:** Fixes optical distortions from your camera lens
+        
+        **Supported lenses:**
+        - Sony FE 24-70mm F2.8 GM
+        - Sony FE 90mm F2.8 Macro G OSS
+        - Sony FE 50mm F1.4 GM
+        - Sony FE 70-200mm F2.8 GM OSS
+        
+        **Turn ON if you see:**
+        - Barrel distortion (curved edges)
+        - Dark corners (vignetting)
+        - Color fringing
+        """)
+    
+    # Tips & Tricks
+    st.subheader("💡 Tips & Tricks", anchor="tips-tricks")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("### For Chrome/Metal Products")
+        st.code("""
+Instructions: "Enhance chrome reflections, 
+increase contrast, make metals look 
+premium and polished"
+
+Settings: 
+- ImageMagick: ON
+- Targeted Enhancement: OFF (not yet optimized)
+        """, language="text")
+    
+    with col2:
+        st.markdown("### For Matte/Textured Products")
+        st.code("""
+Instructions: "Enhance texture details, 
+improve lighting, maintain natural 
+material appearance"
+
+Settings:
+- ImageMagick: ON
+- Gemini: OFF
+        """, language="text")
+    
+    st.markdown("### Batch Processing Best Practices")
+    
+    with st.expander("**Ensure Consistency Across Batches**"):
+        st.markdown("""
+        1. **Always enable Batch Consistency Mode** - This analyzes all images first
+        2. **Group similar products** - Process chrome separately from wood
+        3. **Test on single image first** - Find optimal settings before batch
+        4. **Monitor early results** - Check first few to avoid wasting time
+        5. **Use 3 concurrent workers** - Good balance of speed and stability
+        """)
+    
+    # Quality Scores
+    st.subheader("📊 Understanding Quality Scores")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Excellent", "9-10", delta="Ready to use", delta_color="normal")
+    with col2:
+        st.metric("Good", "7-8", delta="Minor issues", delta_color="normal")
+    with col3:
+        st.metric("Fair", "5-6", delta="May need touchup", delta_color="normal")
+    with col4:
+        st.metric("Poor", "<5", delta="Auto-retry", delta_color="inverse")
+    
+    st.info("Files scoring ≤8 get renamed with quality suffix (e.g., image-q7.webp)")
+    
+    # Troubleshooting
+    st.subheader("🔧 Troubleshooting", anchor="troubleshooting")
+    
+    with st.expander("**Image too dark or too bright**"):
+        st.markdown("""
+        **Solution:**
+        - Add to instructions: "Brighten slightly" or "Reduce exposure"
+        - ImageMagick usually handles this automatically
+        - Check if your original photo is properly exposed
+        """)
+    
+    with st.expander("**Colors look wrong**"):
+        st.markdown("""
+        **Solution:**
+        - Add to instructions: "Correct white balance, enhance natural colors"
+        - Enable lens corrections if using wide-angle lens
+        - Make sure your monitor is color-calibrated
+        """)
+    
+    with st.expander("**Processing is too slow**"):
+        st.markdown("""
+        **Solution:**
+        - Turn OFF Gemini/Chunked Gemini
+        - Use ImageMagick only for speed
+        - Reduce concurrent workers in batch mode
+        - Process smaller batches
+        """)
+    
+    with st.expander("**API Key errors**"):
+        st.markdown("""
+        **Solution:**
+        - Check for extra spaces in your keys
+        - Make sure keys are valid and have quota
+        - Try saving keys again
+        - Refresh the page after saving
+        """)
+    
+    with st.expander("**Quality check keeps failing**"):
+        st.markdown("""
+        **Solution:**
+        - System auto-retries up to 2 times
+        - Try different instructions
+        - Use more conservative settings
+        - May need manual editing for difficult images
+        """)
+    
+    # Workflow Overview
+    st.subheader("🔄 How It Works")
+    
+    st.markdown("""
+    ### The AI Pipeline Process:
+    
+    1. **📊 Analysis** - Claude examines your image and identifies issues
+    2. **📷 Lens Correction** - Fixes optical distortions (if enabled)
+    3. **✨ Enhancement** - ImageMagick and/or Gemini improve the image
+    4. **🖼️ Background Removal** - Creates transparent background (if enabled)
+    5. **🎯 Targeted Enhancement** - Surgical improvements to specific areas (if enabled)
+    6. **✅ Quality Control** - Claude checks the result and may retry if needed
+    
+    Each step is optimized for product photography!
+    """)
+    
+    # Contact and Resources
+    st.subheader("📞 Need More Help?")
+    
+    st.markdown("""
+    - **Error messages are descriptive** - Read them carefully
+    - **Check the console** for detailed logs (F12 in browser)
+    - **Most issues are API related** - Check your quotas
+    - **GitHub Issues**: Report bugs or request features
+    
+    ---
+    
+    💡 **Pro Tip**: Start with conservative settings and increase enhancement gradually. 
+    Less is often more in product photography!
+    """)
 
 # Footer
 st.markdown("---")
