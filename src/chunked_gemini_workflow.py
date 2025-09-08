@@ -194,28 +194,24 @@ class ChunkedImageProcessor:
                 bg.paste(processed_img, mask=processed_img.split()[3] if len(processed_img.split()) > 3 else None)
                 processed_img = bg
             
-            # Crop to remove overlap and get the core chunk area
-            # Calculate how much overlap to remove from each side
-            left_crop = self.OVERLAP_PIXELS if chunk_info.col > 0 else 0
-            top_crop = self.OVERLAP_PIXELS if chunk_info.row > 0 else 0
+            # Simplified stitching - just paste the whole chunk including overlaps
+            # The overlaps will naturally blend as later chunks overwrite earlier ones
+            # This avoids the black stripe artifacts from miscalculated positions
             
-            # Calculate the core chunk size (without overlap)
-            core_width = min(base_chunk_width, self.width - chunk_info.x_start)
-            core_height = min(base_chunk_height, self.height - chunk_info.y_start)
+            # For chunks with overlap, we need to account for where to paste
+            # The chunk was extracted with overlap, so we paste at the extraction position
+            paste_x = chunk_info.x_start - (self.OVERLAP_PIXELS if chunk_info.col > 0 else 0)
+            paste_y = chunk_info.y_start - (self.OVERLAP_PIXELS if chunk_info.row > 0 else 0)
             
-            # Crop to get just the core area
-            core_chunk = processed_img.crop((
-                left_crop,
-                top_crop,
-                left_crop + core_width,
-                top_crop + core_height
-            ))
+            # Ensure we don't paste outside the canvas
+            paste_x = max(0, paste_x)
+            paste_y = max(0, paste_y)
             
-            # Paste at the logical grid position
+            # Paste the full chunk (with overlaps)
             if has_alpha:
-                output.paste(core_chunk, (chunk_info.x_start, chunk_info.y_start), core_chunk)
+                output.paste(processed_img, (paste_x, paste_y), processed_img)
             else:
-                output.paste(core_chunk, (chunk_info.x_start, chunk_info.y_start))
+                output.paste(processed_img, (paste_x, paste_y))
         
         # If we downsampled for 4K, optionally upscale back to original
         # (This is optional - we might want to keep the 4K version)

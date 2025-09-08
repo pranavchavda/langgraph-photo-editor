@@ -300,17 +300,36 @@ async def enhance_area_with_gemini(
                             if size_ratio_w > 1.5 or size_ratio_h > 1.5:
                                 print(f"    ⚠️ Gemini enlarged image ({enhanced_img.size}), extracting best region")
                                 
-                                # For Gemini's tendency to return ~800+ pixel images,
-                                # try to find the most enhanced/detailed region
-                                # Use center crop as it usually has the main enhancement
-                                center_x = enhanced_img.size[0] // 2
-                                center_y = enhanced_img.size[1] // 2
-                                half_w = area.width // 2
-                                half_h = area.height // 2
+                                # For Gemini's tendency to return larger images,
+                                # we need to be smart about which part to extract
+                                # For areas near edges, preserve the edge alignment
+                                
+                                # Determine crop strategy based on area position
+                                img_width, img_height = base_img.size
+                                
+                                # If area is in top-left quarter, preserve top-left alignment
+                                if area.x < img_width // 3 and area.y < img_height // 3:
+                                    x1, y1 = 0, 0
+                                # If area is in top-right quarter, preserve top-right alignment
+                                elif area.x > 2 * img_width // 3 and area.y < img_height // 3:
+                                    x1 = max(0, enhanced_img.size[0] - area.width)
+                                    y1 = 0
+                                # If area is in bottom-left quarter, preserve bottom-left alignment
+                                elif area.x < img_width // 3 and area.y > 2 * img_height // 3:
+                                    x1 = 0
+                                    y1 = max(0, enhanced_img.size[1] - area.height)
+                                # If area is in bottom-right quarter, preserve bottom-right alignment
+                                elif area.x > 2 * img_width // 3 and area.y > 2 * img_height // 3:
+                                    x1 = max(0, enhanced_img.size[0] - area.width)
+                                    y1 = max(0, enhanced_img.size[1] - area.height)
+                                # Otherwise use center crop
+                                else:
+                                    center_x = enhanced_img.size[0] // 2
+                                    center_y = enhanced_img.size[1] // 2
+                                    x1 = max(0, center_x - area.width // 2)
+                                    y1 = max(0, center_y - area.height // 2)
                                 
                                 # Ensure we don't go out of bounds
-                                x1 = max(0, center_x - half_w)
-                                y1 = max(0, center_y - half_h)
                                 x2 = min(enhanced_img.size[0], x1 + area.width)
                                 y2 = min(enhanced_img.size[1], y1 + area.height)
                                 
