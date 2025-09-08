@@ -253,14 +253,15 @@ async def enhanced_agentic_processor(
                 })
         
         # 🔍 Stage 3: Lens Correction (if needed)
-        # Check if lens corrections were already applied in Streamlit
+        # Check if lens corrections were already applied in Streamlit or disabled by user
         already_corrected = "lens-corrected" in image_path or "corrected_" in image_path
+        skip_lens_correction = os.getenv("SKIP_LENS_CORRECTION", "false").lower() == "true"
         
         lens_corrected_path = None
         needs_lens_correction = analysis.get("needs_lens_correction", False)
         lens_issues = analysis.get("lens_issues", [])
         
-        if not already_corrected and needs_lens_correction and lens_issues:
+        if not already_corrected and not skip_lens_correction and needs_lens_correction and lens_issues:
             writer({
                 "stage": "lens_correction",
                 "message": "Applying lens corrections"
@@ -273,6 +274,11 @@ async def enhanced_agentic_processor(
             writer({
                 "stage": "lens_correction_skipped",
                 "message": "Lens corrections already applied"
+            })
+        elif skip_lens_correction:
+            writer({
+                "stage": "lens_correction_skipped",
+                "message": "Lens corrections disabled by user"
             })
         
         # Skip background removal initially - do it after Gemini editing

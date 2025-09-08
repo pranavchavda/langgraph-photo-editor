@@ -421,6 +421,12 @@ if mode == "🖼️ Single Image":
                                 else:
                                     os.environ["USE_TARGETED_ENHANCEMENT"] = "false"
                                 
+                                # Set lens correction preference
+                                if not apply_lens_correction:
+                                    os.environ["SKIP_LENS_CORRECTION"] = "true"
+                                else:
+                                    os.environ["SKIP_LENS_CORRECTION"] = "false"
+                                
                                 # The workflow already handles Pregel invocation internally
                                 result = asyncio.run(process_single_image_enhanced(
                                     image_path=process_path,
@@ -610,6 +616,12 @@ else:  # mode == "📦 Batch Processing"
                                 os.environ["USE_TARGETED_ENHANCEMENT"] = "true"
                             else:
                                 os.environ["USE_TARGETED_ENHANCEMENT"] = "false"
+                            
+                            # Set lens correction preference for batch
+                            if not apply_lens_correction:
+                                os.environ["SKIP_LENS_CORRECTION"] = "true"
+                            else:
+                                os.environ["SKIP_LENS_CORRECTION"] = "false"
                             
                             # The workflow already handles Pregel invocation internally
                             result = await process_single_image_enhanced(
