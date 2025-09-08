@@ -236,6 +236,28 @@ async def enhanced_analysis_agent(image_path: str, custom_instructions: Optional
             
             analysis_result = json.loads(json_text)
             
+            # Apply batch consistency if available
+            if os.getenv('BATCH_IMAGEMAGICK_BASE'):
+                writer({
+                    "agent": "analysis",
+                    "status": "info",
+                    "message": "Applying batch consistency parameters"
+                })
+                # Use batch-consistent ImageMagick command
+                analysis_result['imagemagick_command'] = os.getenv('BATCH_IMAGEMAGICK_BASE')
+                
+                # Prepend batch template to Gemini instructions
+                batch_template = os.getenv('BATCH_GEMINI_TEMPLATE', '')
+                if batch_template and 'gemini_instructions' in analysis_result:
+                    analysis_result['gemini_instructions'] = (
+                        batch_template + "\n\n" +
+                        "Specific to this image: " + analysis_result['gemini_instructions']
+                    )
+                
+                # Add batch context
+                analysis_result['batch_mode'] = True
+                analysis_result['enhancement_level'] = os.getenv('BATCH_ENHANCEMENT_LEVEL', 'moderate')
+            
         except (json.JSONDecodeError, ValueError) as e:
             writer({
                 "agent": "analysis",

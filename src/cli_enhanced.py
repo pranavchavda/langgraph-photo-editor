@@ -486,8 +486,9 @@ async def process(ctx, image_path, output_dir, instructions, json_output):
 @click.option('--max-concurrent', default=3, help='Maximum concurrent processing')
 @click.option('--instructions', help='Custom processing instructions')
 @click.option('--pattern', default='*.{jpg,jpeg,png,webp}', help='File pattern to match')
+@click.option('--no-consistency', is_flag=True, help='Disable batch consistency mode')
 @click.pass_context
-async def batch(ctx, input_dir, output_dir, max_concurrent, instructions, pattern):
+async def batch(ctx, input_dir, output_dir, max_concurrent, instructions, pattern, no_consistency):
     """Process a directory of images"""
     
     use_enhanced = ctx.obj['enhanced']
@@ -496,6 +497,8 @@ async def batch(ctx, input_dir, output_dir, max_concurrent, instructions, patter
     console.print(f"⚡ Concurrency: {max_concurrent}")
     if instructions:
         console.print(f"📝 Instructions: {instructions}")
+    if not no_consistency:
+        console.print(f"🎯 Batch consistency: ENABLED")
     
     try:
         if use_enhanced:
@@ -504,7 +507,8 @@ async def batch(ctx, input_dir, output_dir, max_concurrent, instructions, patter
                 output_dir,
                 max_concurrent,
                 instructions,
-                pattern
+                pattern,
+                use_batch_consistency=not no_consistency
             )
         else:
             # Import classic function

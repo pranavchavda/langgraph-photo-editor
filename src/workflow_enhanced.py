@@ -627,9 +627,10 @@ async def process_image_batch_enhanced(
     output_dir: Optional[str] = None,
     max_concurrent: int = 3,
     custom_instructions: Optional[str] = None,
-    pattern: str = "*.{jpg,jpeg,png,webp}"
+    pattern: str = "*.{jpg,jpeg,png,webp}",
+    use_batch_consistency: bool = True
 ) -> Dict[str, Any]:
-    """Process multiple images with the enhanced workflow"""
+    """Process multiple images with the enhanced workflow and optional batch consistency"""
     
     input_path = Path(input_dir)
     if not input_path.exists():
@@ -644,7 +645,18 @@ async def process_image_batch_enhanced(
     if not image_files:
         raise ValueError(f"No supported images found in: {input_dir}")
     
-    # Process images with concurrency control
+    # Use batch consistency if enabled and multiple images
+    if use_batch_consistency and len(image_files) > 1:
+        from .batch_consistency import process_batch_with_consistency
+        print(f"🎯 Using batch consistency mode for {len(image_files)} images")
+        return await process_batch_with_consistency(
+            [str(img) for img in image_files],
+            custom_instructions,
+            output_dir,
+            max_concurrent
+        )
+    
+    # Process images with concurrency control (original method)
     semaphore = asyncio.Semaphore(max_concurrent)
     
     async def process_single(image_path):
