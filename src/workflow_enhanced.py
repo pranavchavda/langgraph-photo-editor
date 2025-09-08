@@ -201,7 +201,8 @@ async def enhanced_agentic_processor(
     # Initialize or restore state
     image_path = inputs["image_path"]
     custom_instructions = inputs.get("custom_instructions")
-    retry_count = (previous or {}).get("retry_count", 0)
+    # Get retry_count from inputs first (for recursive calls), then from previous state
+    retry_count = inputs.get("retry_count", (previous or {}).get("retry_count", 0))
     
     writer({
         "workflow": "enhanced_started",
@@ -479,13 +480,15 @@ async def enhanced_agentic_processor(
             )
         
         # 🔄 Retry Logic (if quality is still poor)
-        if retry_count < 2:  # Max 2 retries
+        MAX_RETRIES = 2
+        if retry_count < MAX_RETRIES and final_quality < 7:  # Max 2 retries, only if quality is poor
             writer({
                 "workflow": "enhanced_retry",
                 "attempt": retry_count + 1,
+                "max_attempts": MAX_RETRIES,
                 "quality": final_quality,
                 "issues": qc_result.get("issues_found", []),
-                "message": f"🔄 Quality insufficient ({final_quality}/10), retrying with refined approach"
+                "message": f"🔄 Quality insufficient ({final_quality}/10), retry {retry_count + 1}/{MAX_RETRIES}"
             })
             
             # Create refined analysis for retry
@@ -498,14 +501,15 @@ async def enhanced_agentic_processor(
             elif editing_strategy == "imagemagick" and final_quality < 7:
                 refined_analysis["editing_strategy"] = "both"  # Try Gemini + ImageMagick
             
-            # Recursive retry with refined approach
+            # Recursive retry with refined approach - pass retry count forward
             import uuid
             config = {"configurable": {"thread_id": str(uuid.uuid4())}}
             retry_result = await enhanced_agentic_processor.ainvoke(
                 {
                     "image_path": image_path,
                     "custom_instructions": custom_instructions,
-                    "refined_analysis": refined_analysis
+                    "refined_analysis": refined_analysis,
+                    "retry_count": retry_count + 1  # Pass the incremented count
                 },
                 config=config
             )
@@ -515,6 +519,13 @@ async def enhanced_agentic_processor(
             )
         
         # 😞 Final attempt - return best result even if not perfect
+        writer({
+            "workflow": "retry_limit_reached",
+            "retry_count": retry_count,
+            "final_quality": final_quality,
+            "message": f"⚠️ Retry limit reached ({retry_count} attempts), accepting result with quality {final_quality}/10"
+        })
+        
         # Finalize with quality indicators and cleanup
         final_image_path = finalize_output_with_quality_and_cleanup(
             final_image_path, final_quality, intermediate_files, passed_qc
