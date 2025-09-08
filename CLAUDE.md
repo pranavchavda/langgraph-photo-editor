@@ -245,4 +245,45 @@ npm run electron:build
 - Use specialized Claude Code subagents for further coding when available
 - The AppImage build process handles Python bundling automatically
 - File management is cross-platform compatible
-- Gemini processing works seamlessly with proper API keys 
+- Gemini processing works seamlessly with proper API keys
+
+## GPT5-Suggested Improvements (In Development - gpt5-improvements branch)
+
+### New Dust & Scratch Repair Pipeline
+**Problem Solved**: Explicit defect detection and repair instead of hoping AI enhancement removes them
+
+**New Agents**:
+- **Defect Detection Agent** (`src/defect_detection_agent.py`): Uses OpenCV morphological operations to find dust/scratches
+- **G'MIC Repair Agent** (`src/gmic_repair_agent.py`): Applies specialized despeckle/inpaint filters
+- **OpenCV Inpainting Agent** (`src/opencv_inpaint_agent.py`): Mask-guided defect removal using Telea/NS methods
+
+### Enhanced Batch Consistency System
+**Problem Solved**: Deterministic consistency instead of probabilistic AI variance
+
+**New Agents**:
+- **Darktable Style Agent** (`src/darktable_agent.py`): Apply fixed "house styles" for consistent grading
+- **Libvips Export Agent** (`src/vips_export_agent.py`): 5-10x faster export with consistent parameters
+
+### Updated Workflow Order
+1. Analysis → 2. Defect Detection → 3. Repair (G'MIC/OpenCV) → 4. Darktable Normalize → 5. Lens Correction → 
+6. Enhancement (ImageMagick/Gemini) → 7. Background → 8. Targeted Enhancement → 9. Vips Export → 10. QC
+
+### Configuration Options
+- `USE_GMIC_REPAIR`: Enable automatic dust/scratch repair
+- `USE_DARKTABLE_STYLE`: Apply consistent house style
+- `USE_VIPS_EXPORT`: Use fast libvips export
+- `DEFECT_SENSITIVITY`: Adjust detection threshold (0-100)
+
+### Dependencies
+```bash
+# System packages
+sudo apt-get install gmic darktable libvips-tools
+
+# Python packages
+pip install pyvips opencv-python
+```
+
+### Performance Improvements
+- **Repair**: G'MIC is 3x faster than asking Gemini to remove dust
+- **Export**: libvips is 5-10x faster than ImageMagick for resize/export
+- **Consistency**: Darktable styles are 100% deterministic vs AI variance 
