@@ -40,11 +40,11 @@ class ImageChunk:
 class ChunkedImageProcessor:
     """Handles chunking and stitching of high-resolution images"""
     
-    MAX_CHUNK_SIZE = 1080  # Gemini's effective limit
+    MAX_CHUNK_SIZE = 900   # Safe size under Gemini's 1024x1024 limit
     OVERLAP_PIXELS = 50    # Overlap for seamless blending
     TARGET_4K_WIDTH = 3840  # Standard 4K width
     TARGET_4K_HEIGHT = 2160 # Standard 4K height
-    GEMINI_OUTPUT_SIZE = 1024  # Gemini typically outputs ~1024px
+    GEMINI_OUTPUT_SIZE = 900  # Expected Gemini output size (matching input)
     
     def __init__(self, image_path: str, target_4k: bool = False):
         self.image_path = image_path
@@ -87,16 +87,16 @@ class ChunkedImageProcessor:
         """Calculate optimal number of chunks to minimize seams"""
         if self.target_4k and self.width != self.original_width:
             # For 4K mode, optimize for Gemini's output size
-            # Each chunk will be ~1024px after Gemini processing
+            # Each chunk will be ~900px (Gemini's safe limit)
             # So we want chunks that result in good coverage at 4K
             
-            # Target 4-6 chunks for 4K width (3840px)
-            chunks_x = max(2, min(4, math.ceil(self.width / 1000)))
-            # Target 2-3 chunks for 4K height (2160px)  
-            chunks_y = max(2, min(3, math.ceil(self.height / 1000)))
+            # Target 5-6 chunks for 4K width (3840px)
+            chunks_x = max(2, min(5, math.ceil(self.width / 850)))
+            # Target 3-4 chunks for 4K height (2160px)  
+            chunks_y = max(2, min(3, math.ceil(self.height / 850)))
             
             print(f"  4K chunk layout: {chunks_x}x{chunks_y} = {chunks_x * chunks_y} chunks")
-            print(f"  Each chunk ~{self.width//chunks_x}x{self.height//chunks_y}px → Gemini outputs ~1024px")
+            print(f"  Each chunk ~{self.width//chunks_x}x{self.height//chunks_y}px → Gemini processes at ~900px")
         else:
             # Standard calculation for full resolution
             chunks_x = math.ceil(self.width / self.MAX_CHUNK_SIZE)
