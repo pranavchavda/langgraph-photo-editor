@@ -556,6 +556,33 @@ else:  # mode == "📦 Batch Processing"
             estimated_time = (len(uploaded_files) / max_concurrent) * 30  # ~30s per image
             st.caption(f"Est. time: {int(estimated_time)}s")
         
+        # Batch processing options
+        st.subheader("⚙️ Processing Options")
+        col1b, col2b = st.columns(2)
+        
+        with col1b:
+            batch_use_imagemagick = st.checkbox("Use ImageMagick Optimization", value=True, key="batch_imagemagick",
+                                         help="Traditional image processing for sharpening, color correction, and optimization.")
+            batch_use_gemini = st.checkbox("Use Gemini AI Enhancement", value=False, key="batch_gemini",
+                                    help="Enable for AI-powered editing (lower resolution).")
+            batch_use_chunked_gemini = st.checkbox("Use Chunked Gemini (High-Res AI)", value=False, key="batch_chunked",
+                                    help="Process high-resolution images through Gemini by intelligent chunking.")
+        
+        with col2b:
+            batch_remove_background = st.checkbox("Remove Background", value=True, key="batch_remove_bg")
+            # Show 4K mode option when chunked Gemini is selected
+            batch_use_4k_mode = False
+            if batch_use_chunked_gemini:
+                batch_use_4k_mode = st.checkbox("Enable 4K Mode", value=True, key="batch_4k",
+                                         help="For images over 12MP, process at 4K resolution.")
+                batch_use_gemini = False  # Disable regular Gemini if chunked is selected
+            
+            # Targeted Enhancement option
+            batch_use_targeted = False
+            if not batch_use_gemini and not batch_use_chunked_gemini and batch_use_imagemagick:
+                batch_use_targeted = st.checkbox("🎯 Targeted Enhancement", value=False, key="batch_targeted",
+                    help="Enhance specific areas with Gemini AI after ImageMagick")
+        
         # Batch consistency option
         st.subheader("🎯 Consistency Options")
         use_batch_consistency = st.checkbox(
@@ -579,7 +606,7 @@ else:  # mode == "📦 Batch Processing"
         if process_batch_button:
             if not anthropic_key:
                 st.error("⚠️ Please enter your Anthropic API key in the sidebar")
-            elif use_gemini and not gemini_key:
+            elif (batch_use_gemini or batch_use_chunked_gemini) and not gemini_key:
                 st.error("⚠️ Please enter your Gemini API key in the sidebar")
             else:
                 os.environ["ANTHROPIC_API_KEY"] = anthropic_key
@@ -628,14 +655,19 @@ else:  # mode == "📦 Batch Processing"
                                 process_path = str(input_path)
                             
                             # Add processing preferences to instructions
-                            final_batch_instructions = batch_instructions
-                            if not use_gemini:
-                                final_batch_instructions += " Skip Gemini."
-                            if not use_imagemagick:
-                                final_batch_instructions += " Skip ImageMagick."
+                            if batch_use_chunked_gemini:
+                                os.environ["USE_CHUNKED_GEMINI"] = "true"
+                                os.environ["USE_4K_MODE"] = "true" if batch_use_4k_mode else "false"
+                                final_batch_instructions = f"[CHUNKED_GEMINI_MODE] {batch_instructions}"
+                            elif batch_use_gemini:
+                                final_batch_instructions = f"Apply Gemini AI enhancement: {batch_instructions}"
+                            else:
+                                final_batch_instructions = batch_instructions
+                                if not batch_use_gemini:
+                                    final_batch_instructions += " Skip Gemini."
                             
                             # Set targeted enhancement flag if enabled
-                            if use_targeted_enhancement:
+                            if batch_use_targeted:
                                 os.environ["USE_TARGETED_ENHANCEMENT"] = "true"
                             else:
                                 os.environ["USE_TARGETED_ENHANCEMENT"] = "false"
@@ -647,10 +679,16 @@ else:  # mode == "📦 Batch Processing"
                                 os.environ["SKIP_LENS_CORRECTION"] = "false"
                             
                             # Set ImageMagick preference for batch
-                            if not use_imagemagick:
+                            if not batch_use_imagemagick:
                                 os.environ["SKIP_IMAGEMAGICK"] = "true"
                             else:
                                 os.environ["SKIP_IMAGEMAGICK"] = "false"
+                            
+                            # Set background removal preference
+                            if not batch_remove_background:
+                                os.environ["SKIP_BACKGROUND_REMOVAL"] = "true"
+                            else:
+                                os.environ["SKIP_BACKGROUND_REMOVAL"] = "false"
                             
                             # The workflow already handles Pregel invocation internally
                             result = await process_single_image_enhanced(
@@ -714,19 +752,19 @@ else:  # mode == "📦 Batch Processing"
                                     corrected_paths.append(path)
                             
                             # Set environment variables for processing options
-                            os.environ["USE_TARGETED_ENHANCEMENT"] = "true" if use_targeted_enhancement else "false"
+                            os.environ["USE_TARGETED_ENHANCEMENT"] = "true" if batch_use_targeted else "false"
                             os.environ["SKIP_LENS_CORRECTION"] = "true"  # Already applied above
                             
-                            if use_chunked_gemini:
+                            if batch_use_chunked_gemini:
                                 os.environ["USE_CHUNKED_GEMINI"] = "true"
-                                os.environ["USE_4K_MODE"] = "true" if use_4k_mode else "false"
+                                os.environ["USE_4K_MODE"] = "true" if batch_use_4k_mode else "false"
                                 final_batch_instructions = f"[CHUNKED_GEMINI_MODE] {batch_instructions}"
-                            elif use_gemini:
+                            elif batch_use_gemini:
                                 final_batch_instructions = f"Apply Gemini AI enhancement: {batch_instructions}"
                             else:
                                 final_batch_instructions = batch_instructions
                             
-                            if not use_imagemagick:
+                            if not batch_use_imagemagick:
                                 os.environ["SKIP_IMAGEMAGICK"] = "true"
                             else:
                                 os.environ["SKIP_IMAGEMAGICK"] = "false"
