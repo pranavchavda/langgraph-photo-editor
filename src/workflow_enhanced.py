@@ -253,11 +253,14 @@ async def enhanced_agentic_processor(
                 })
         
         # 🔍 Stage 3: Lens Correction (if needed)
+        # Check if lens corrections were already applied in Streamlit
+        already_corrected = "lens-corrected" in image_path or "corrected_" in image_path
+        
         lens_corrected_path = None
         needs_lens_correction = analysis.get("needs_lens_correction", False)
         lens_issues = analysis.get("lens_issues", [])
         
-        if needs_lens_correction and lens_issues:
+        if not already_corrected and needs_lens_correction and lens_issues:
             writer({
                 "stage": "lens_correction",
                 "message": "Applying lens corrections"
@@ -266,6 +269,11 @@ async def enhanced_agentic_processor(
             if lens_corrected_path != current_image:
                 current_image = lens_corrected_path
                 intermediate_files.append(lens_corrected_path)
+        elif already_corrected:
+            writer({
+                "stage": "lens_correction_skipped",
+                "message": "Lens corrections already applied"
+            })
         
         # Skip background removal initially - do it after Gemini editing
         # This ensures lens correction is applied to the original image first
@@ -379,6 +387,39 @@ async def enhanced_agentic_processor(
         passed_qc = qc_result.get("passed", False)
         
         if passed_qc and final_quality >= 9:
+            # 🎯 Optional Targeted Enhancement Stage (after successful ImageMagick)
+            use_targeted_enhancement = os.getenv("USE_TARGETED_ENHANCEMENT", "false").lower() == "true"
+            
+            if use_targeted_enhancement and editing_strategy in ["imagemagick", "both"]:
+                writer({
+                    "workflow": "targeted_enhancement_start",
+                    "message": "🎯 Starting targeted Gemini enhancement on specific areas..."
+                })
+                
+                try:
+                    from src.targeted_enhancement import targeted_enhancement_pipeline
+                    
+                    targeted_result = await targeted_enhancement_pipeline(
+                        final_image_path,
+                        custom_instructions=custom_instructions,
+                        max_areas=3,
+                        initial_analysis=analysis
+                    )
+                    
+                    if targeted_result.get("enhanced") and targeted_result.get("final_image"):
+                        final_image_path = targeted_result["final_image"]
+                        writer({
+                            "workflow": "targeted_enhancement_success",
+                            "areas_enhanced": targeted_result.get("areas_enhanced", 0),
+                            "message": f"✅ Enhanced {targeted_result.get('areas_enhanced', 0)} targeted areas"
+                        })
+                except Exception as e:
+                    writer({
+                        "workflow": "targeted_enhancement_error",
+                        "error": str(e),
+                        "message": f"⚠️ Targeted enhancement failed: {e}, using standard result"
+                    })
+            
             # Finalize with quality indicators and cleanup
             final_image_path = finalize_output_with_quality_and_cleanup(
                 final_image_path, final_quality, intermediate_files, passed_qc
@@ -400,6 +441,7 @@ async def enhanced_agentic_processor(
                     "editing_strategy": editing_strategy,
                     "gemini_used": gemini_edited_path is not None,
                     "imagemagick_used": imagemagick_optimized_path is not None,
+                    "targeted_enhancement_used": use_targeted_enhancement,
                     "retry_count": retry_count
                 },
                 save={
@@ -433,14 +475,18 @@ async def enhanced_agentic_processor(
                 refined_analysis["editing_strategy"] = "both"  # Try Gemini + ImageMagick
             
             # Recursive retry with refined approach
+            import uuid
+            config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+            retry_result = await enhanced_agentic_processor.ainvoke(
+                {
+                    "image_path": image_path,
+                    "custom_instructions": custom_instructions,
+                    "refined_analysis": refined_analysis
+                },
+                config=config
+            )
             return entrypoint.final(
-                value=await enhanced_agentic_processor(
-                    {
-                        "image_path": image_path,
-                        "custom_instructions": custom_instructions,
-                        "refined_analysis": refined_analysis
-                    }
-                ),
+                value=retry_result,
                 save={"retry_count": retry_count + 1}
             )
         

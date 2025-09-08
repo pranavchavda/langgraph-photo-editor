@@ -153,27 +153,56 @@ with st.sidebar:
     st.subheader("Processing Options")
     use_gemini = st.checkbox("Use Gemini AI Enhancement", value=False, 
                             help="Enable for AI-powered editing (lower resolution). Disable for traditional high-resolution processing.")
+    use_chunked_gemini = st.checkbox("Use Chunked Gemini (High-Res AI) 🆕", value=False,
+                            help="Process high-resolution images through Gemini by intelligent chunking. Maintains full resolution with AI editing.")
+    
+    # Show 4K mode option when chunked Gemini is selected
+    use_4k_mode = False
+    if use_chunked_gemini:
+        use_4k_mode = st.checkbox("Enable 4K Mode for Large Images", value=True,
+                                 help="For images over 12MP, process at 4K resolution for faster results. Perfect for web/screen viewing.")
+        use_gemini = False  # Disable regular Gemini if chunked is selected
+    
+    # Targeted Enhancement option (only shows when not using chunked or regular Gemini)
+    use_targeted_enhancement = False
+    if not use_gemini and not use_chunked_gemini:
+        use_targeted_enhancement = st.checkbox(
+            "🎯 Targeted Gemini Enhancement", 
+            value=False,
+            help="After ImageMagick optimization, identify and enhance specific areas (chrome, textures, details) with Gemini AI"
+        )
+    
     remove_background = st.checkbox("Remove Background", value=True)
     
     st.subheader("📷 Lens Corrections")
+    
+    # Add checkbox to enable/disable lens corrections
+    apply_lens_correction = st.checkbox(
+        "Apply Lens Corrections", 
+        value=True,
+        help="Enable automatic lens corrections for distortion and vignetting. Disable if corrections are warping your image."
+    )
+    
     lens_options = get_lens_options()
     selected_lens = st.selectbox(
         "Select lens used (or auto-detect):",
         lens_options,
         index=len(lens_options) - 1,  # Default to auto-detect
-        help="Select your Sony lens for automatic corrections like Lightroom"
+        help="Select your Sony lens for automatic corrections like Lightroom",
+        disabled=not apply_lens_correction  # Disable selector if corrections are off
     )
     
     # Show focal length selector for zoom lenses
     focal_length = None
-    if selected_lens and "mm F" in selected_lens and "-" in selected_lens:
+    if apply_lens_correction and selected_lens and "mm F" in selected_lens and "-" in selected_lens:
         # It's a zoom lens, show focal length options
         focal_options = get_focal_length_options(selected_lens)
         if focal_options:
             focal_length = st.select_slider(
                 "Focal length used:",
                 options=focal_options,
-                value=focal_options[len(focal_options)//2]  # Default to middle
+                value=focal_options[len(focal_options)//2],  # Default to middle
+                disabled=not apply_lens_correction
             )
     
     st.info("💡 Tip: API keys are saved in your browser and persist across sessions")
@@ -277,11 +306,44 @@ if mode == "🖼️ Single Image":
             
             if st.session_state.processing_metrics:
                 st.subheader("📊 Processing Metrics")
-                col_a, col_b = st.columns(2)
-                with col_a:
-                    st.metric("Quality Score", st.session_state.processing_metrics['quality'])
-                with col_b:
-                    st.metric("Strategy Used", st.session_state.processing_metrics['strategy'])
+                metrics = st.session_state.processing_metrics
+                
+                # Check if it's chunked mode with extended metrics
+                if 'chunks_processed' in metrics:
+                    # Chunked mode - show more metrics
+                    col_a, col_b, col_c = st.columns(3)
+                    with col_a:
+                        st.metric("Quality", metrics['quality'])
+                    with col_b:
+                        st.metric("Chunks", metrics['chunks_processed'])
+                    with col_c:
+                        if 'mode' in metrics:
+                            st.metric("Mode", metrics['mode'])
+                        else:
+                            st.metric("Strategy", metrics['strategy'])
+                    
+                    # Show resolution info if available
+                    if metrics.get('original_resolution') != 'N/A':
+                        col_d, col_e = st.columns(2)
+                        with col_d:
+                            orig_res = metrics['original_resolution']
+                            if isinstance(orig_res, tuple):
+                                st.metric("Original", f"{orig_res[0]}x{orig_res[1]}")
+                            else:
+                                st.metric("Original", orig_res)
+                        with col_e:
+                            final_res = metrics['final_resolution']
+                            if isinstance(final_res, tuple):
+                                st.metric("Final", f"{final_res[0]}x{final_res[1]}")
+                            else:
+                                st.metric("Final", final_res)
+                else:
+                    # Standard mode - show basic metrics
+                    col_a, col_b = st.columns(2)
+                    with col_a:
+                        st.metric("Quality Score", metrics['quality'])
+                    with col_b:
+                        st.metric("Strategy Used", metrics['strategy'])
         
         if uploaded_file and process_button:
             # Get keys from session state (saved via form)
@@ -306,14 +368,19 @@ if mode == "🖼️ Single Image":
                             with open(input_path, "wb") as f:
                                 f.write(uploaded_file.getbuffer())
                             
-                            # Apply lens corrections first if applicable
-                            corrected_path = str(Path(temp_dir) / f"corrected_{uploaded_file.name}")
-                            lens_result = apply_lens_corrections(
-                                str(input_path),
-                                corrected_path,
-                                selected_lens=selected_lens if selected_lens != "None (Auto-detect from EXIF)" else None,
-                                focal_length=float(focal_length.replace('mm', '')) if focal_length else None
-                            )
+                            # Apply lens corrections first if enabled and applicable
+                            if apply_lens_correction:
+                                corrected_path = str(Path(temp_dir) / f"corrected_{uploaded_file.name}")
+                                lens_result = apply_lens_corrections(
+                                    str(input_path),
+                                    corrected_path,
+                                    selected_lens=selected_lens if selected_lens != "None (Auto-detect from EXIF)" else None,
+                                    focal_length=float(focal_length.replace('mm', '')) if focal_length else None
+                                )
+                            else:
+                                # Skip lens corrections
+                                lens_result = {'corrections_applied': False, 'reason': 'Lens corrections disabled by user'}
+                                corrected_path = str(input_path)
                             
                             # Use corrected image if corrections were applied
                             if lens_result.get('corrections_applied'):
@@ -331,17 +398,35 @@ if mode == "🖼️ Single Image":
                                     st.info("📷 No lens data found in EXIF, proceeding without lens corrections")
                                 process_path = str(input_path)
                             
-                            # Add Gemini preference to instructions
-                            final_instructions = instructions
-                            if not use_gemini:
-                                final_instructions += " Skip Gemini."
-                            
-                            # The workflow already handles Pregel invocation internally
-                            result = asyncio.run(process_single_image_enhanced(
-                                image_path=process_path,
-                                custom_instructions=final_instructions,
-                                output_dir=temp_dir
-                            ))
+                            # Check which processing mode to use
+                            if use_chunked_gemini:
+                                # Use chunked Gemini pipeline for high-res AI processing
+                                from src.chunked_gemini_workflow import chunked_gemini_pipeline
+                                result = asyncio.run(chunked_gemini_pipeline(
+                                    image_path=process_path,
+                                    custom_instructions=instructions,
+                                    output_dir=temp_dir,
+                                    target_4k=use_4k_mode,
+                                    remove_background=remove_background
+                                ))
+                            else:
+                                # Add Gemini preference to instructions
+                                final_instructions = instructions
+                                if not use_gemini:
+                                    final_instructions += " Skip Gemini."
+                                
+                                # Set targeted enhancement flag if enabled
+                                if use_targeted_enhancement:
+                                    os.environ["USE_TARGETED_ENHANCEMENT"] = "true"
+                                else:
+                                    os.environ["USE_TARGETED_ENHANCEMENT"] = "false"
+                                
+                                # The workflow already handles Pregel invocation internally
+                                result = asyncio.run(process_single_image_enhanced(
+                                    image_path=process_path,
+                                    custom_instructions=final_instructions,
+                                    output_dir=temp_dir
+                                ))
                             
                             if result.get("final_image"):
                                 output_path = result.get("final_image")
@@ -359,10 +444,27 @@ if mode == "🖼️ Single Image":
                                     else:
                                         quality_display = quality
                                     strategy = result.get('strategy', 'Enhanced AI Pipeline')
-                                    st.session_state.processing_metrics = {
-                                        'quality': quality_display,
-                                        'strategy': strategy
-                                    }
+                                    
+                                    # Add resolution info for chunked mode
+                                    if use_chunked_gemini:
+                                        metrics = {
+                                            'quality': quality_display,
+                                            'strategy': 'Chunked Gemini AI',
+                                            'chunks_processed': f"{result.get('chunks_processed', 'N/A')}/{result.get('total_chunks', 'N/A')}",
+                                            'original_resolution': result.get('original_resolution', 'N/A'),
+                                            'final_resolution': result.get('final_resolution', 'N/A')
+                                        }
+                                        if result.get('used_4k_mode'):
+                                            metrics['mode'] = '4K Optimized'
+                                    else:
+                                        metrics = {
+                                            'quality': quality_display,
+                                            'strategy': strategy
+                                        }
+                                        if result.get('targeted_enhancement_used'):
+                                            metrics['targeted_areas'] = '🎯 Enhanced'
+                                    
+                                    st.session_state.processing_metrics = metrics
                                     
                                     st.success("✅ Image processed successfully!")
                                     st.rerun()
@@ -475,14 +577,19 @@ else:  # mode == "📦 Batch Processing"
                             
                             status_text.text(f"Processing {file.name} ({idx + 1}/{total})...")
                             
-                            # Apply lens corrections first
-                            corrected_path = str(Path(temp_dir) / f"corrected_{idx}_{file.name}")
-                            lens_result = apply_lens_corrections(
-                                str(input_path),
-                                corrected_path,
-                                selected_lens=batch_lens if batch_lens != "None (Auto-detect from EXIF)" else None,
-                                focal_length=float(batch_focal.replace('mm', '')) if batch_focal else None
-                            )
+                            # Apply lens corrections first if enabled
+                            if apply_lens_correction:
+                                corrected_path = str(Path(temp_dir) / f"corrected_{idx}_{file.name}")
+                                lens_result = apply_lens_corrections(
+                                    str(input_path),
+                                    corrected_path,
+                                    selected_lens=batch_lens if batch_lens != "None (Auto-detect from EXIF)" else None,
+                                    focal_length=float(batch_focal.replace('mm', '')) if batch_focal else None
+                                )
+                            else:
+                                # Skip lens corrections
+                                lens_result = {'corrections_applied': False}
+                                corrected_path = str(input_path)
                             
                             # Use corrected image if corrections were applied
                             if lens_result.get('corrections_applied'):
@@ -497,6 +604,12 @@ else:  # mode == "📦 Batch Processing"
                             final_batch_instructions = batch_instructions
                             if not use_gemini:
                                 final_batch_instructions += " Skip Gemini."
+                            
+                            # Set targeted enhancement flag if enabled
+                            if use_targeted_enhancement:
+                                os.environ["USE_TARGETED_ENHANCEMENT"] = "true"
+                            else:
+                                os.environ["USE_TARGETED_ENHANCEMENT"] = "false"
                             
                             # The workflow already handles Pregel invocation internally
                             result = await process_single_image_enhanced(
