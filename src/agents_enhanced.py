@@ -135,10 +135,13 @@ async def enhanced_analysis_agent(image_path: str, custom_instructions: Optional
     **IMAGEMAGICK EXPOSURE SAFETY**:
     - AVOID aggressive brightness adjustments that cause overexposure
     - DO NOT use -auto-level, -normalize, or -equalize (they often overexpose)
-    - Use CONSERVATIVE values: -brightness-contrast 0x3 (max 2x5)
-    - For modulate: keep brightness at 100-102 (not 105+)
-    - Prefer -gamma 0.95 to 1.05 over brightness for exposure
-    - Use -evaluate multiply for subtle adjustments
+    - STRICT LIMITS ENFORCED:
+      • brightness-contrast: -5 to +5 for both values
+      • gamma: 0.8 to 1.2 only
+      • modulate brightness: 95 to 105 only
+    - Start conservative: try -brightness-contrast 0x2 or -gamma 1.02
+    - For darker images: -gamma 0.95 or -brightness-contrast 2x3
+    - For brighter images: -gamma 1.05 or -brightness-contrast -2x2
     - Test with -channel RGB to avoid affecting transparency
     
     **LENS CORRECTION POLICY**:
@@ -552,21 +555,70 @@ async def imagemagick_optimization_agent(image_path: str, analysis: Dict[str, An
             })
             imagemagick_command = imagemagick_command.replace(dangerous, '')
     
-    # Limit brightness-contrast values if too aggressive
+    # Comprehensive brightness/contrast/gamma limiting
     import re
-    bc_match = re.search(r'-brightness-contrast\s+(\d+)x(\d+)', imagemagick_command)
+    
+    # 1. Limit brightness-contrast values
+    bc_match = re.search(r'-brightness-contrast\s+(-?\d+)x(-?\d+)', imagemagick_command)
     if bc_match:
         brightness = int(bc_match.group(1))
         contrast = int(bc_match.group(2))
-        if brightness > 3 or contrast > 5:
+        
+        # Clamp brightness between -5 and +5, contrast between -5 and +5
+        orig_brightness, orig_contrast = brightness, contrast
+        brightness = max(-5, min(5, brightness))
+        contrast = max(-5, min(5, contrast))
+        
+        if orig_brightness != brightness or orig_contrast != contrast:
             writer({
                 "agent": "imagemagick",
                 "status": "warning",
-                "message": f"Reducing aggressive brightness-contrast {brightness}x{contrast} to 2x4"
+                "message": f"Clamping brightness-contrast from {orig_brightness}x{orig_contrast} to {brightness}x{contrast}"
             })
             imagemagick_command = re.sub(
-                r'-brightness-contrast\s+\d+x\d+',
-                '-brightness-contrast 2x4',
+                r'-brightness-contrast\s+-?\d+x-?\d+',
+                f'-brightness-contrast {brightness}x{contrast}',
+                imagemagick_command
+            )
+    
+    # 2. Limit gamma values (0.8 to 1.2 range)
+    gamma_match = re.search(r'-gamma\s+([\d.]+)', imagemagick_command)
+    if gamma_match:
+        gamma = float(gamma_match.group(1))
+        orig_gamma = gamma
+        gamma = max(0.8, min(1.2, gamma))
+        
+        if orig_gamma != gamma:
+            writer({
+                "agent": "imagemagick",
+                "status": "warning",
+                "message": f"Clamping gamma from {orig_gamma} to {gamma}"
+            })
+            imagemagick_command = re.sub(
+                r'-gamma\s+[\d.]+',
+                f'-gamma {gamma}',
+                imagemagick_command
+            )
+    
+    # 3. Limit modulate brightness (95-105 range)
+    modulate_match = re.search(r'-modulate\s+(\d+),(\d+),(\d+)', imagemagick_command)
+    if modulate_match:
+        brightness_mod = int(modulate_match.group(1))
+        saturation = int(modulate_match.group(2))
+        hue = int(modulate_match.group(3))
+        
+        orig_brightness_mod = brightness_mod
+        brightness_mod = max(95, min(105, brightness_mod))
+        
+        if orig_brightness_mod != brightness_mod:
+            writer({
+                "agent": "imagemagick",
+                "status": "warning",
+                "message": f"Clamping modulate brightness from {orig_brightness_mod} to {brightness_mod}"
+            })
+            imagemagick_command = re.sub(
+                r'-modulate\s+\d+,\d+,\d+',
+                f'-modulate {brightness_mod},{saturation},{hue}',
                 imagemagick_command
             )
     
