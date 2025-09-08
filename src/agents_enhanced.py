@@ -132,6 +132,15 @@ async def enhanced_analysis_agent(image_path: str, custom_instructions: Optional
     - Sharpening and noise reduction
     - Straightforward optimizations
     
+    **IMAGEMAGICK EXPOSURE SAFETY**:
+    - AVOID aggressive brightness adjustments that cause overexposure
+    - DO NOT use -auto-level, -normalize, or -equalize (they often overexpose)
+    - Use CONSERVATIVE values: -brightness-contrast 0x3 (max 2x5)
+    - For modulate: keep brightness at 100-102 (not 105+)
+    - Prefer -gamma 0.95 to 1.05 over brightness for exposure
+    - Use -evaluate multiply for subtle adjustments
+    - Test with -channel RGB to avoid affecting transparency
+    
     **LENS CORRECTION POLICY**:
     - Lens corrections (barrel/pincushion distortion, vignetting, chromatic aberration) are handled separately by the lensfun library.
     - Do NOT include lens correction steps in gemini_instructions.
@@ -238,7 +247,7 @@ async def enhanced_analysis_agent(image_path: str, custom_instructions: Optional
                 "complex_problems": [],
                 "editing_strategy": "imagemagick",
                 "gemini_instructions": "",
-                "imagemagick_command": "-brightness-contrast 5x10 -modulate 105,110,100",
+                "imagemagick_command": "-gamma 1.02 -modulate 100,108,100 -unsharp 0x1",
                 "editing_explanation": "Fallback to basic optimization",
                 "remove_background": True,
                 "optimization_priority": ["brightness", "contrast", "saturation"],
@@ -531,6 +540,35 @@ async def imagemagick_optimization_agent(image_path: str, analysis: Dict[str, An
     
     # Generate output path
     output_path = str(Path(image_path).parent / f"{Path(image_path).stem}-optimized.webp")
+    
+    # Safety check: prevent aggressive exposure adjustments
+    dangerous_commands = ['-auto-level', '-normalize', '-equalize', '-contrast-stretch']
+    for dangerous in dangerous_commands:
+        if dangerous in imagemagick_command:
+            writer({
+                "agent": "imagemagick",
+                "status": "warning",
+                "message": f"Removing dangerous command {dangerous} to prevent overexposure"
+            })
+            imagemagick_command = imagemagick_command.replace(dangerous, '')
+    
+    # Limit brightness-contrast values if too aggressive
+    import re
+    bc_match = re.search(r'-brightness-contrast\s+(\d+)x(\d+)', imagemagick_command)
+    if bc_match:
+        brightness = int(bc_match.group(1))
+        contrast = int(bc_match.group(2))
+        if brightness > 3 or contrast > 5:
+            writer({
+                "agent": "imagemagick",
+                "status": "warning",
+                "message": f"Reducing aggressive brightness-contrast {brightness}x{contrast} to 2x4"
+            })
+            imagemagick_command = re.sub(
+                r'-brightness-contrast\s+\d+x\d+',
+                '-brightness-contrast 2x4',
+                imagemagick_command
+            )
     
     try:
         # Build ImageMagick command with platform detection

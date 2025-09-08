@@ -151,6 +151,8 @@ with st.sidebar:
         st.success("✅ Remove.bg key loaded")
     
     st.subheader("Processing Options")
+    use_imagemagick = st.checkbox("Use ImageMagick Optimization", value=True,
+                                 help="Traditional image processing for sharpening, color correction, and optimization. Disable to skip.")
     use_gemini = st.checkbox("Use Gemini AI Enhancement", value=False, 
                             help="Enable for AI-powered editing (lower resolution). Disable for traditional high-resolution processing.")
     use_chunked_gemini = st.checkbox("Use Chunked Gemini (High-Res AI) 🆕", value=False,
@@ -163,9 +165,9 @@ with st.sidebar:
                                  help="For images over 12MP, process at 4K resolution for faster results. Perfect for web/screen viewing.")
         use_gemini = False  # Disable regular Gemini if chunked is selected
     
-    # Targeted Enhancement option (only shows when not using chunked or regular Gemini)
+    # Targeted Enhancement option (only shows when not using chunked or regular Gemini and ImageMagick is enabled)
     use_targeted_enhancement = False
-    if not use_gemini and not use_chunked_gemini:
+    if not use_gemini and not use_chunked_gemini and use_imagemagick:
         use_targeted_enhancement = st.checkbox(
             "🎯 Targeted Gemini Enhancement", 
             value=False,
@@ -410,10 +412,12 @@ if mode == "🖼️ Single Image":
                                     remove_background=remove_background
                                 ))
                             else:
-                                # Add Gemini preference to instructions
+                                # Add processing preferences to instructions
                                 final_instructions = instructions
                                 if not use_gemini:
                                     final_instructions += " Skip Gemini."
+                                if not use_imagemagick:
+                                    final_instructions += " Skip ImageMagick."
                                 
                                 # Set targeted enhancement flag if enabled
                                 if use_targeted_enhancement:
@@ -426,6 +430,12 @@ if mode == "🖼️ Single Image":
                                     os.environ["SKIP_LENS_CORRECTION"] = "true"
                                 else:
                                     os.environ["SKIP_LENS_CORRECTION"] = "false"
+                                
+                                # Set ImageMagick preference
+                                if not use_imagemagick:
+                                    os.environ["SKIP_IMAGEMAGICK"] = "true"
+                                else:
+                                    os.environ["SKIP_IMAGEMAGICK"] = "false"
                                 
                                 # The workflow already handles Pregel invocation internally
                                 result = asyncio.run(process_single_image_enhanced(
@@ -606,10 +616,12 @@ else:  # mode == "📦 Batch Processing"
                             else:
                                 process_path = str(input_path)
                             
-                            # Add Gemini preference to instructions
+                            # Add processing preferences to instructions
                             final_batch_instructions = batch_instructions
                             if not use_gemini:
                                 final_batch_instructions += " Skip Gemini."
+                            if not use_imagemagick:
+                                final_batch_instructions += " Skip ImageMagick."
                             
                             # Set targeted enhancement flag if enabled
                             if use_targeted_enhancement:
@@ -622,6 +634,12 @@ else:  # mode == "📦 Batch Processing"
                                 os.environ["SKIP_LENS_CORRECTION"] = "true"
                             else:
                                 os.environ["SKIP_LENS_CORRECTION"] = "false"
+                            
+                            # Set ImageMagick preference for batch
+                            if not use_imagemagick:
+                                os.environ["SKIP_IMAGEMAGICK"] = "true"
+                            else:
+                                os.environ["SKIP_IMAGEMAGICK"] = "false"
                             
                             # The workflow already handles Pregel invocation internally
                             result = await process_single_image_enhanced(

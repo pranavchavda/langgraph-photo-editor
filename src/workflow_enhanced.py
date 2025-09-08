@@ -211,6 +211,9 @@ async def enhanced_agentic_processor(
     })
     
     try:
+        # Check if ImageMagick is disabled by user
+        skip_imagemagick = os.getenv("SKIP_IMAGEMAGICK", "false").lower() == "true"
+        
         # 🔍 Stage 1: Enhanced Analysis
         writer({
             "stage": "analysis",
@@ -218,6 +221,14 @@ async def enhanced_agentic_processor(
         })
         analysis = await run_enhanced_analysis_agent(image_path, custom_instructions)
         editing_strategy = analysis.get("editing_strategy", "imagemagick")
+        
+        # Override strategy if ImageMagick is disabled
+        if skip_imagemagick and editing_strategy == "imagemagick":
+            editing_strategy = "gemini"  # Fall back to Gemini if available
+            writer({
+                "stage": "strategy_override",
+                "message": "ImageMagick disabled, using Gemini instead"
+            })
         
         writer({
             "stage": "analysis_complete",
@@ -308,9 +319,15 @@ async def enhanced_agentic_processor(
                 # Force ImageMagick fallback
                 editing_strategy = "imagemagick"
         
-        # ⚡ Stage 5: ImageMagick Optimization (only if Gemini wasn't used)
+        # ⚡ Stage 5: ImageMagick Optimization (only if Gemini wasn't used and not skipped by user)
         imagemagick_optimized_path = None
-        if editing_strategy == "imagemagick":
+        
+        if skip_imagemagick:
+            writer({
+                "stage": "imagemagick_skipped",
+                "message": "ImageMagick optimization disabled by user"
+            })
+        elif editing_strategy == "imagemagick":
             writer({
                 "stage": "imagemagick_optimization", 
                 "message": "Applying ImageMagick optimizations" + (" via Wand" if WAND_AVAILABLE else "")
@@ -354,10 +371,11 @@ async def enhanced_agentic_processor(
         # 🔄 Stage 6: ImageMagick Fallback Decision
         final_image_path = current_image
         
-        # Skip ImageMagick fallback if Gemini was specifically chosen and used
+        # Skip ImageMagick fallback if Gemini was specifically chosen and used or if ImageMagick is disabled
         if (qc_result.get("needs_imagemagick_fallback", False) and 
             not imagemagick_optimized_path and 
-            editing_strategy != "gemini"):
+            editing_strategy != "gemini" and
+            not skip_imagemagick):
             writer({
                 "stage": "imagemagick_fallback",
                 "message": "QC recommends ImageMagick fallback - applying additional optimization"
