@@ -264,7 +264,118 @@ async def enhanced_agentic_processor(
                     "message": f"Cropping failed, continuing: {str(e)}"
                 })
         
-        # 🔍 Stage 3: Lens Correction (if needed)
+        # 🔍 Stage 3: Defect Detection and Repair (NEW)
+        # Check if repair is enabled and not already processed
+        skip_repair = os.getenv("SKIP_REPAIR", "false").lower() == "true"
+        
+        if skip_repair:
+            writer({
+                "stage": "defect_repair_skipped",
+                "message": "🔧 Defect repair disabled by user"
+            })
+            print("🔧 Defect repair disabled by user preference")
+        elif "repaired" in current_image or "inpainted" in current_image:
+            writer({
+                "stage": "defect_repair_skipped",
+                "message": "🔧 Defect repair already applied"
+            })
+            print("🔧 Defect repair already applied to image")
+        else:
+            writer({
+                "stage": "defect_detection",
+                "message": "🔧 Starting defect detection and repair"
+            })
+            print("🔧 Starting defect detection and repair process...")
+            
+            try:
+                # Import repair agents
+                from .defect_detection_agent import detect_defects_agent
+                from .opencv_inpaint_agent import opencv_inpaint_agent, smart_inpaint
+                from .gmic_repair_agent import gmic_repair_agent, check_gmic_available
+                
+                # Detect defects - get sensitivity from environment or analysis
+                sensitivity = int(os.getenv("DEFECT_SENSITIVITY", "50"))
+                print(f"   🔍 Analyzing image for defects (sensitivity: {sensitivity})")
+                defect_result = await detect_defects_agent(
+                    current_image,
+                    sensitivity=sensitivity
+                )
+                
+                if defect_result.get("has_defects"):
+                    defect_count = defect_result.get("defect_count", 0)
+                    print(f"   ⚠️ Found {defect_count} defect pixels")
+                    writer({
+                        "stage": "defect_repair",
+                        "message": f"Found defects: {', '.join(defect_result.get('defect_types', []))}"
+                    })
+                    
+                    # Try G'MIC first if available
+                    repair_applied = False
+                    if check_gmic_available():
+                        print("   🔧 Attempting G'MIC repair...")
+                        repair_result = await gmic_repair_agent(
+                            current_image,
+                            mask_path=defect_result.get("mask_path"),
+                            repair_mode="auto"
+                        )
+                        if repair_result.get("success"):
+                            current_image = repair_result["output_path"]
+                            intermediate_files.append(repair_result["output_path"])
+                            repair_applied = True
+                            writer({
+                                "stage": "repair_complete",
+                                "message": f"G'MIC repair applied: {', '.join(repair_result.get('filters_applied', []))}"
+                            })
+                            print(f"   ✅ G'MIC repair successful: {', '.join(repair_result.get('filters_applied', []))}")
+                    else:
+                        print("   ℹ️ G'MIC not available")
+                    
+                    # Fall back to OpenCV if G'MIC didn't work or wasn't available
+                    if not repair_applied and defect_result.get("mask_path"):
+                        print("   🎨 Attempting OpenCV inpainting...")
+                        # Use aggressive mode if sensitivity is high
+                        aggressive = sensitivity > 60
+                        inpaint_result = await smart_inpaint(
+                            current_image,
+                            defect_result,
+                            aggressive=aggressive
+                        )
+                        if inpaint_result.get("success"):
+                            current_image = inpaint_result["output_path"]
+                            intermediate_files.append(inpaint_result["output_path"])
+                            repair_applied = True
+                            writer({
+                                "stage": "repair_complete",
+                                "message": f"OpenCV inpainting applied: {inpaint_result.get('method_used', 'auto')}"
+                            })
+                            print(f"   ✅ OpenCV repair successful: {inpaint_result.get('method_used', 'auto')} method")
+                        else:
+                            print(f"   ⚠️ OpenCV repair failed: {inpaint_result.get('message', 'Unknown error')}")
+                    
+                    if not repair_applied:
+                        print("   ⚠️ No repair methods succeeded, continuing with original image")
+                else:
+                    writer({
+                        "stage": "defect_detection_complete",
+                        "message": "No significant defects detected"
+                    })
+                    print("   ✅ No significant defects detected, skipping repair")
+                    
+            except Exception as e:
+                writer({
+                    "stage": "repair_skipped",
+                    "message": f"Defect repair failed: {str(e)}"
+                })
+                print(f"   ❌ Defect repair error: {str(e)}")
+        
+        # Log repair summary
+        if not skip_repair:
+            if current_image != image_path:
+                print(f"   ✅ DEFECT REPAIR COMPLETED - Image was repaired")
+            else:
+                print(f"   ℹ️ DEFECT REPAIR COMPLETED - No repairs applied")
+        
+        # 🔍 Stage 4: Lens Correction (if needed)
         # Check if lens corrections were already applied in Streamlit or disabled by user
         already_corrected = "lens-corrected" in image_path or "corrected_" in image_path
         skip_lens_correction = os.getenv("SKIP_LENS_CORRECTION", "false").lower() == "true"
@@ -346,7 +457,9 @@ async def enhanced_agentic_processor(
             })
         
         # 🖼️ Stage 4.5: Background Removal (after Gemini editing)
-        if analysis.get("remove_background", False):
+        # Check if background removal is enabled by user (not just analysis suggestion)
+        skip_background_removal = os.getenv("SKIP_BACKGROUND_REMOVAL", "false").lower() == "true"
+        if not skip_background_removal and analysis.get("remove_background", False):
             writer({
                 "stage": "background_removal_final",
                 "message": "Removing background from enhanced image"
