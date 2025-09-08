@@ -126,7 +126,10 @@ async def analyze_batch_consistency(
         }}
     }}
     
-    IMPORTANT: Prioritize CONSISTENCY across the batch over individual perfection.
+    IMPORTANT: 
+    1. Prioritize CONSISTENCY across the batch over individual perfection
+    2. Return ONLY the JSON object, no additional text or explanation
+    3. Ensure the JSON is valid and complete
     """
     
     try:
@@ -151,12 +154,39 @@ async def analyze_batch_consistency(
         
         # Parse response
         text = response.content[0].text.strip()
+        
+        # Extract JSON from various formats
         if "```json" in text:
             text = text.split("```json")[1].split("```")[0].strip()
         elif "```" in text:
             text = text.split("```")[1].split("```")[0].strip()
+        elif "{" in text:
+            # Find the JSON object boundaries
+            start = text.find("{")
+            # Find matching closing brace
+            brace_count = 0
+            end = start
+            for i in range(start, len(text)):
+                if text[i] == "{":
+                    brace_count += 1
+                elif text[i] == "}":
+                    brace_count -= 1
+                    if brace_count == 0:
+                        end = i + 1
+                        break
+            text = text[start:end]
         
-        analysis = json.loads(text)
+        # Clean up any trailing commas or extra data
+        text = text.strip()
+        if text.endswith(","):
+            text = text[:-1]
+        
+        try:
+            analysis = json.loads(text)
+        except json.JSONDecodeError as e:
+            print(f"⚠️ JSON parse error: {e}")
+            print(f"  Attempted to parse: {text[:200]}...")
+            raise
         
         # Build consistent processing profile
         brightness_adj = analysis['brightness_analysis'].get('adjustment', '0')
