@@ -1114,6 +1114,28 @@ elif mode == "❓ Help & Guide":
         **Best for:** Products with mixed materials needing selective enhancement
         """)
     
+    with st.expander("**Auto Defect Repair** 🔧 🆕"):
+        st.markdown("""
+        **What it does:** Automatically detects and repairs dust, scratches, and sensor defects
+        
+        **How it works:**
+        1. **Detection:** Uses OpenCV to find dust spots, scratches, and hot pixels
+        2. **Repair:** Applies G'MIC filters or OpenCV inpainting to fix defects
+        3. **Smart Selection:** Chooses repair method based on defect type
+        
+        **Sensitivity Slider (0-100):**
+        - **0-30:** Only obvious defects (recommended for textured products)
+        - **40-60:** Balanced detection (default)
+        - **70-100:** Aggressive detection (may affect intentional details)
+        
+        **Best for:** 
+        - Product photos with dust or minor scratches
+        - Sensor dust spots from camera
+        - Small imperfections that shouldn't be there
+        
+        **Note:** Can be slow on large images. May remove intentional texture on very sensitive settings.
+        """)
+    
     with st.expander("**Background Removal** (Default: ON)"):
         st.markdown("""
         **What it does:** Professionally removes backgrounds using Remove.bg API
@@ -1178,6 +1200,19 @@ Settings:
         3. **Test on single image first** - Find optimal settings before batch
         4. **Monitor early results** - Check first few to avoid wasting time
         5. **Use 3 concurrent workers** - Good balance of speed and stability
+        """)
+    
+    with st.expander("**Using Auto Defect Repair in Batches**"):
+        st.markdown("""
+        **⚠️ Important:** Defect repair can significantly slow batch processing
+        
+        **Recommendations:**
+        - **For dusty product photos:** Enable with sensitivity 40-50
+        - **For clean studio shots:** Usually not needed
+        - **Mixed batch:** Process dusty items separately
+        - **Test first:** Check one image to dial in sensitivity
+        
+        **Pro tip:** If many images need repair, consider running them through a dedicated defect repair pass first
         """)
     
     # Quality Scores
