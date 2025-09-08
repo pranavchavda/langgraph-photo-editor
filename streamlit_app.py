@@ -556,6 +556,17 @@ else:  # mode == "📦 Batch Processing"
             estimated_time = (len(uploaded_files) / max_concurrent) * 30  # ~30s per image
             st.caption(f"Est. time: {int(estimated_time)}s")
         
+        # Batch consistency option
+        st.subheader("🎯 Consistency Options")
+        use_batch_consistency = st.checkbox(
+            "Enable Batch Consistency Mode",
+            value=True,
+            help="Analyze all images first to ensure consistent brightness, color, and enhancement levels across the entire batch. Prevents some images from being much brighter/darker than others."
+        )
+        
+        if use_batch_consistency:
+            st.info("📊 Batch consistency will analyze all images first to establish uniform processing parameters")
+        
         st.subheader("✏️ Batch Instructions")
         batch_instructions = st.text_area(
             "Enter editing instructions (applied to all images):",
@@ -672,21 +683,99 @@ else:  # mode == "📦 Batch Processing"
                             }
                     
                     async def process_batch():
-                        tasks = []
-                        for idx, file in enumerate(uploaded_files):
-                            task = process_image_async(file, idx, len(uploaded_files))
-                            tasks.append(task)
-                        
-                        all_results = []
-                        for i in range(0, len(tasks), max_concurrent):
-                            batch = tasks[i:i + max_concurrent]
-                            batch_results = await asyncio.gather(*batch)
-                            all_results.extend(batch_results)
+                        # If batch consistency is enabled, use the new workflow
+                        if use_batch_consistency and len(uploaded_files) > 1:
+                            from src.batch_consistency import process_batch_with_consistency
                             
-                            progress = min((i + max_concurrent) / len(tasks), 1.0)
-                            progress_bar.progress(progress, text=f"Processed {min(i + max_concurrent, len(tasks))}/{len(tasks)} images")
-                        
-                        return all_results
+                            # Save all files to temp directory first
+                            image_paths = []
+                            for idx, file in enumerate(uploaded_files):
+                                input_path = Path(temp_dir) / f"input_{idx}_{file.name}"
+                                with open(input_path, "wb") as f:
+                                    f.write(file.getbuffer())
+                                image_paths.append(str(input_path))
+                            
+                            # Apply lens corrections if needed
+                            corrected_paths = []
+                            for idx, path in enumerate(image_paths):
+                                if apply_lens_correction:
+                                    corrected_path = str(Path(temp_dir) / f"corrected_{idx}_{Path(path).name}")
+                                    lens_result = apply_lens_corrections(
+                                        path,
+                                        corrected_path,
+                                        selected_lens=batch_lens if batch_lens != "None (Auto-detect from EXIF)" else None,
+                                        focal_length=float(batch_focal.replace('mm', '')) if batch_focal else None
+                                    )
+                                    if lens_result.get('corrections_applied'):
+                                        corrected_paths.append(corrected_path)
+                                    else:
+                                        corrected_paths.append(path)
+                                else:
+                                    corrected_paths.append(path)
+                            
+                            # Set environment variables for processing options
+                            os.environ["USE_TARGETED_ENHANCEMENT"] = "true" if use_targeted_enhancement else "false"
+                            os.environ["SKIP_LENS_CORRECTION"] = "true"  # Already applied above
+                            
+                            if use_chunked_gemini:
+                                os.environ["USE_CHUNKED_GEMINI"] = "true"
+                                os.environ["USE_4K_MODE"] = "true" if use_4k_mode else "false"
+                                final_batch_instructions = f"[CHUNKED_GEMINI_MODE] {batch_instructions}"
+                            elif use_gemini:
+                                final_batch_instructions = f"Apply Gemini AI enhancement: {batch_instructions}"
+                            else:
+                                final_batch_instructions = batch_instructions
+                            
+                            if not use_imagemagick:
+                                os.environ["SKIP_IMAGEMAGICK"] = "true"
+                            else:
+                                os.environ["SKIP_IMAGEMAGICK"] = "false"
+                            
+                            # Process with batch consistency
+                            status_text.text("🔍 Analyzing batch for consistency...")
+                            batch_result = await process_batch_with_consistency(
+                                corrected_paths,
+                                final_batch_instructions,
+                                temp_dir,
+                                max_concurrent
+                            )
+                            
+                            # Convert results to expected format
+                            all_results = []
+                            for idx, result in enumerate(batch_result.get('results', [])):
+                                if isinstance(result, dict) and result.get('final_image'):
+                                    all_results.append({
+                                        "success": True,
+                                        "original_name": uploaded_files[idx].name,
+                                        "output_path": result.get("final_image"),
+                                        "quality": result.get('final_quality', result.get('quality_score', 'N/A')),
+                                        "batch_consistent": True
+                                    })
+                                else:
+                                    all_results.append({
+                                        "success": False,
+                                        "original_name": uploaded_files[idx].name if idx < len(uploaded_files) else f"image_{idx}",
+                                        "error": str(result) if not isinstance(result, dict) else result.get('error', 'Unknown error')
+                                    })
+                            
+                            return all_results
+                        else:
+                            # Original non-consistency batch processing
+                            tasks = []
+                            for idx, file in enumerate(uploaded_files):
+                                task = process_image_async(file, idx, len(uploaded_files))
+                                tasks.append(task)
+                            
+                            all_results = []
+                            for i in range(0, len(tasks), max_concurrent):
+                                batch = tasks[i:i + max_concurrent]
+                                batch_results = await asyncio.gather(*batch)
+                                all_results.extend(batch_results)
+                                
+                                progress = min((i + max_concurrent) / len(tasks), 1.0)
+                                progress_bar.progress(progress, text=f"Processed {min(i + max_concurrent, len(tasks))}/{len(tasks)} images")
+                            
+                            return all_results
                     
                     with st.spinner(f"Processing {len(uploaded_files)} images..."):
                         results = asyncio.run(process_batch())
@@ -699,6 +788,17 @@ else:  # mode == "📦 Batch Processing"
                     
                     st.markdown("---")
                     st.header("📊 Results Summary")
+                    
+                    # Show batch consistency info if it was used
+                    if use_batch_consistency and len(uploaded_files) > 1 and 'batch_result' in locals():
+                        batch_profile = batch_result.get('batch_profile')
+                        if batch_profile:
+                            st.info(f"""
+                            🎯 **Batch Consistency Applied:**
+                            - Enhancement Level: {batch_profile.get('enhancement_level', 'N/A')}
+                            - Brightness Adjustment: {batch_profile.get('brightness_adjustment', 'N/A')}
+                            - Lighting Style: {batch_profile.get('lighting_style', 'N/A')}
+                            """)
                     
                     # Main metrics
                     col1, col2, col3 = st.columns(3)
