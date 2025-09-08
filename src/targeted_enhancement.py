@@ -126,7 +126,8 @@ async def targeted_area_analysis_agent(
     ]
     
     Coordinates should define a rectangle around the area needing enhancement.
-    Make areas reasonably sized (200-800px typically) to capture the full element.
+    Make areas reasonably sized (200-900px max) to capture the full element.
+    IMPORTANT: Keep width and height under 900px each to stay within Gemini's limits.
     
     If no enhancements needed, return: []
     """
@@ -185,11 +186,14 @@ async def targeted_area_analysis_agent(
                 area_id=f"area_{i}"
             )
             
-            # Validate coordinates
+            # Validate coordinates and enforce size limits for Gemini
             enhancement_area.x = max(0, min(enhancement_area.x, width - 50))
             enhancement_area.y = max(0, min(enhancement_area.y, height - 50))
-            enhancement_area.width = min(enhancement_area.width, width - enhancement_area.x)
-            enhancement_area.height = min(enhancement_area.height, height - enhancement_area.y)
+            
+            # Enforce 900x900 max size for Gemini 2.5 Flash limits
+            max_size = 900
+            enhancement_area.width = min(enhancement_area.width, width - enhancement_area.x, max_size)
+            enhancement_area.height = min(enhancement_area.height, height - enhancement_area.y, max_size)
             
             areas.append(enhancement_area)
         
@@ -233,6 +237,12 @@ async def enhance_area_with_gemini(
     area_img = base_img.crop((area.x, area.y, area.x + area.width, area.y + area.height))
     
     print(f"    📐 Extracted area size: {area_img.size} from position ({area.x}, {area.y})")
+    
+    # Safety check for Gemini limits
+    if area_img.size[0] > 900 or area_img.size[1] > 900:
+        print(f"    ⚠️ Area too large ({area_img.size}), resizing to fit 900x900 limit")
+        area_img.thumbnail((900, 900), Image.Resampling.LANCZOS)
+        print(f"    📐 Resized to: {area_img.size}")
     
     # Save JUST THE CROPPED AREA as WebP for processing
     area_bytes = BytesIO()
