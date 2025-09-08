@@ -174,6 +174,25 @@ with st.sidebar:
             help="After ImageMagick optimization, identify and enhance specific areas (chrome, textures, details) with Gemini AI"
         )
     
+    # Defect Repair option (NEW)
+    use_defect_repair = st.checkbox(
+        "🔧 Auto Defect Repair (Experimental)", 
+        value=False,
+        help="Automatically detect and repair dust, scratches, and hot pixels using G'MIC and OpenCV"
+    )
+    
+    # Defect repair sensitivity slider (only show when repair is enabled)
+    defect_sensitivity = 50  # Default
+    if use_defect_repair:
+        defect_sensitivity = st.slider(
+            "Defect Detection Sensitivity",
+            min_value=10,
+            max_value=90,
+            value=50,
+            step=10,
+            help="Lower = only obvious defects, Higher = more aggressive detection"
+        )
+    
     remove_background = st.checkbox("Remove Background", value=True)
     
     st.subheader("📷 Lens Corrections")
@@ -262,7 +281,7 @@ if mode == "🖼️ Single Image":
         
         if uploaded_file:
             image = Image.open(uploaded_file)
-            st.image(image, caption="Original Image", use_container_width=True)
+            st.image(image, caption="Original Image", width="stretch")
             
             st.subheader("✏️ Instructions")
             instructions = st.text_area(
@@ -278,7 +297,7 @@ if mode == "🖼️ Single Image":
         
         # Display stored result if available
         if st.session_state.processed_image is not None:
-            st.image(st.session_state.processed_image, caption="Enhanced Image", use_container_width=True)
+            st.image(st.session_state.processed_image, caption="Enhanced Image", width="stretch")
             
             # Prominent download button with custom styling
             st.markdown("""
@@ -437,6 +456,19 @@ if mode == "🖼️ Single Image":
                                 else:
                                     os.environ["SKIP_IMAGEMAGICK"] = "false"
                                 
+                                # Set defect repair preference (NEW)
+                                if use_defect_repair:
+                                    os.environ["SKIP_REPAIR"] = "false"
+                                    os.environ["DEFECT_SENSITIVITY"] = str(defect_sensitivity)
+                                else:
+                                    os.environ["SKIP_REPAIR"] = "true"
+                                
+                                # Set background removal preference
+                                if not remove_background:
+                                    os.environ["SKIP_BACKGROUND_REMOVAL"] = "true"
+                                else:
+                                    os.environ["SKIP_BACKGROUND_REMOVAL"] = "false"
+                                
                                 # The workflow already handles Pregel invocation internally
                                 result = asyncio.run(process_single_image_enhanced(
                                     image_path=process_path,
@@ -513,7 +545,7 @@ else:  # mode == "📦 Batch Processing"
         for idx, file in enumerate(uploaded_files[:5]):
             with cols[idx]:
                 image = Image.open(file)
-                st.image(image, caption=file.name[:20], use_container_width=True)
+                st.image(image, caption=file.name[:20], width="stretch")
         
         if len(uploaded_files) > 5:
             st.info(f"...and {len(uploaded_files) - 5} more images")
@@ -582,6 +614,27 @@ else:  # mode == "📦 Batch Processing"
             if not batch_use_gemini and not batch_use_chunked_gemini and batch_use_imagemagick:
                 batch_use_targeted = st.checkbox("🎯 Targeted Enhancement", value=False, key="batch_targeted",
                     help="Enhance specific areas with Gemini AI after ImageMagick")
+            
+            # Defect Repair option (NEW)
+            batch_use_repair = st.checkbox(
+                "🔧 Auto Defect Repair", 
+                value=False, 
+                key="batch_repair",
+                help="Automatically detect and repair dust, scratches, and hot pixels"
+            )
+            
+            # Batch defect sensitivity
+            batch_defect_sensitivity = 50
+            if batch_use_repair:
+                batch_defect_sensitivity = st.slider(
+                    "Defect Detection Sensitivity",
+                    min_value=10,
+                    max_value=90,
+                    value=50,
+                    step=10,
+                    key="batch_sensitivity",
+                    help="Lower = only obvious defects, Higher = more aggressive detection"
+                )
         
         # Batch consistency option
         st.subheader("🎯 Consistency Options")
@@ -758,6 +811,12 @@ else:  # mode == "📦 Batch Processing"
                             os.environ["USE_TARGETED_ENHANCEMENT"] = "true" if batch_use_targeted else "false"
                             os.environ["SKIP_LENS_CORRECTION"] = "true"  # Already applied above
                             os.environ["SKIP_GEMINI"] = "true" if not batch_use_gemini and not batch_use_chunked_gemini else "false"
+                            if batch_use_repair:
+                                os.environ["SKIP_REPAIR"] = "false"
+                                os.environ["DEFECT_SENSITIVITY"] = str(batch_defect_sensitivity)
+                            else:
+                                os.environ["SKIP_REPAIR"] = "true"
+                            os.environ["SKIP_BACKGROUND_REMOVAL"] = "false" if batch_remove_background else "true"
                             
                             if batch_use_chunked_gemini:
                                 os.environ["USE_CHUNKED_GEMINI"] = "true"
@@ -943,7 +1002,7 @@ else:  # mode == "📦 Batch Processing"
                                     with col:
                                         if Path(result["output_path"]).exists():
                                             enhanced_img = Image.open(result["output_path"])
-                                            st.image(enhanced_img, caption=f"{result['original_name'][:20]}", use_container_width=True)
+                                            st.image(enhanced_img, caption=f"{result['original_name'][:20]}", width="stretch")
                                             
                                             quality = result.get('quality', 'N/A')
                                             if quality != 'N/A':
