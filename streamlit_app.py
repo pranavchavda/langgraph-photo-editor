@@ -179,7 +179,7 @@ with st.sidebar:
     # Add checkbox to enable/disable lens corrections
     apply_lens_correction = st.checkbox(
         "Apply Lens Corrections", 
-        value=True,
+        value=False,
         help="Enable automatic lens corrections for distortion and vignetting. Disable if corrections are warping your image."
     )
     
