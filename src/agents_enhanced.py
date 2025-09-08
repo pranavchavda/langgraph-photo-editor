@@ -236,6 +236,18 @@ async def enhanced_analysis_agent(image_path: str, custom_instructions: Optional
             
             analysis_result = json.loads(json_text)
             
+            # Check if user wants to skip Gemini (via instructions or environment variable)
+            skip_gemini = (
+                (custom_instructions and "skip gemini" in custom_instructions.lower()) or
+                os.getenv('SKIP_GEMINI', 'false').lower() == 'true'
+            )
+            
+            if skip_gemini:
+                print("DEBUG: Skipping Gemini - forcing imagemagick strategy")
+                analysis_result['editing_strategy'] = 'imagemagick'
+                analysis_result['gemini_instructions'] = ''
+                analysis_result['editing_explanation'] = 'Gemini AI editing disabled'
+            
             # Apply batch consistency if available
             if os.getenv('BATCH_IMAGEMAGICK_BASE'):
                 writer({

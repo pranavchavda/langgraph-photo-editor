@@ -107,22 +107,22 @@ async def analyze_batch_consistency(
             "average": "dark/normal/bright",
             "variance": "low/medium/high",
             "target": "slightly brighter/maintain/slightly darker",
-            "adjustment": "-2 to +2 range"
+            "adjustment": "-2"
         }},
         "color_analysis": {{
             "white_balance": "cool/neutral/warm",
             "saturation": "low/normal/high",
             "consistency": "consistent/variable",
-            "correction_needed": true/false
+            "correction_needed": true
         }},
-        "common_issues": ["list of issues found across batch"],
-        "lighting_style": "studio/natural/mixed",
-        "materials": ["chrome", "wood", "plastic", etc],
+        "common_issues": ["dust", "reflections", "color cast"],
+        "lighting_style": "studio",
+        "materials": ["chrome", "wood", "plastic"],
         "recommended_approach": {{
-            "enhancement_level": "subtle/moderate/strong",
-            "priority": "consistency/quality/both",
-            "imagemagick_base": "conservative ImageMagick command",
-            "gemini_focus": "what Gemini should focus on"
+            "enhancement_level": "moderate",
+            "priority": "consistency",
+            "imagemagick_base": "-brightness-contrast 0x2 -modulate 100,102,100",
+            "gemini_focus": "enhance product details while maintaining consistency"
         }}
     }}
     

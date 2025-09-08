@@ -672,6 +672,9 @@ else:  # mode == "📦 Batch Processing"
                             else:
                                 os.environ["USE_TARGETED_ENHANCEMENT"] = "false"
                             
+                            # Set Gemini skip flag
+                            os.environ["SKIP_GEMINI"] = "true" if not batch_use_gemini and not batch_use_chunked_gemini else "false"
+                            
                             # Set lens correction preference for batch
                             if not apply_lens_correction:
                                 os.environ["SKIP_LENS_CORRECTION"] = "true"
@@ -754,6 +757,7 @@ else:  # mode == "📦 Batch Processing"
                             # Set environment variables for processing options
                             os.environ["USE_TARGETED_ENHANCEMENT"] = "true" if batch_use_targeted else "false"
                             os.environ["SKIP_LENS_CORRECTION"] = "true"  # Already applied above
+                            os.environ["SKIP_GEMINI"] = "true" if not batch_use_gemini and not batch_use_chunked_gemini else "false"
                             
                             if batch_use_chunked_gemini:
                                 os.environ["USE_CHUNKED_GEMINI"] = "true"
@@ -763,6 +767,8 @@ else:  # mode == "📦 Batch Processing"
                                 final_batch_instructions = f"Apply Gemini AI enhancement: {batch_instructions}"
                             else:
                                 final_batch_instructions = batch_instructions
+                                if not batch_use_gemini:
+                                    final_batch_instructions += " Skip Gemini."
                             
                             if not batch_use_imagemagick:
                                 os.environ["SKIP_IMAGEMAGICK"] = "true"

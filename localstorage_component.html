@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script>
+        // This component manages localStorage for API keys
+        
+        function initializeStorage() {
+            // Get Streamlit's parent window
+            const parent = window.parent;
+            
+            // Function to save keys to localStorage
+            window.saveKeys = function(anthropic, gemini, removebg) {
+                if (anthropic) localStorage.setItem('doug_anthropic_key', anthropic);
+                if (gemini) localStorage.setItem('doug_gemini_key', gemini); 
+                if (removebg) localStorage.setItem('doug_removebg_key', removebg);
+                console.log('Keys saved to localStorage');
+            };
+            
+            // Function to load keys from localStorage
+            window.loadKeys = function() {
+                return {
+                    anthropic: localStorage.getItem('doug_anthropic_key') || '',
+                    gemini: localStorage.getItem('doug_gemini_key') || '',
+                    removebg: localStorage.getItem('doug_removebg_key') || ''
+                };
+            };
+            
+            // Send loaded keys to Streamlit
+            const keys = loadKeys();
+            parent.postMessage({
+                type: 'storage_loaded',
+                keys: keys
+            }, '*');
+            
+            // Listen for save requests from Streamlit
+            window.addEventListener('message', function(e) {
+                if (e.data.type === 'save_keys') {
+                    saveKeys(e.data.anthropic, e.data.gemini, e.data.removebg);
+                    // Confirm save
+                    parent.postMessage({
+                        type: 'storage_saved',
+                        success: true
+                    }, '*');
+                }
+            });
+        }
+        
+        // Initialize when DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeStorage);
+        } else {
+            initializeStorage();
+        }
+    </script>
+</head>
+<body style="margin: 0; padding: 0;">
+    <!-- This component is invisible -->
+</body>
+</html>
