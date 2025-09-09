@@ -4,6 +4,8 @@ High-quality image optimization using Wand (Python bindings for ImageMagick)
 """
 
 import asyncio
+import os
+import re
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple
 import base64
@@ -47,10 +49,39 @@ async def wand_optimization_agent(image_path: str, analysis: Dict[str, Any]) -> 
         from .agents_enhanced import imagemagick_optimization_agent
         return await imagemagick_optimization_agent(image_path, analysis)
     
+    # Check for custom configurations
+    custom_config_set = False
+    batch_config = os.getenv('BATCH_IMAGEMAGICK_BASE')
+    custom_config = os.getenv('IMAGEMAGICK_BASE_CONFIG')
+    
+    if batch_config:
+        writer({
+            "agent": "wand_optimizer",
+            "status": "info",
+            "message": "Using batch base configuration (no AI adjustments)"
+        })
+        custom_config_set = True
+        config_command = batch_config
+    elif custom_config:
+        writer({
+            "agent": "wand_optimizer",
+            "status": "info",
+            "message": "Using custom slider configuration (no AI adjustments)"
+        })
+        custom_config_set = True
+        config_command = custom_config
+    else:
+        writer({
+            "agent": "wand_optimizer",
+            "status": "info",
+            "message": "Using AI-optimized configuration"
+        })
+        config_command = None
+    
     writer({
         "agent": "wand_optimizer",
         "status": "processing",
-        "message": "Applying professional ImageMagick optimizations via Wand"
+        "message": "Applying ImageMagick optimizations via Wand"
     })
     
     try:
@@ -59,72 +90,123 @@ async def wand_optimization_agent(image_path: str, analysis: Dict[str, Any]) -> 
             original_width = img.width
             original_height = img.height
             
-            # 1. Color and Exposure Adjustments
-            lighting_issues = analysis.get("lighting_issues", [])
-            color_problems = analysis.get("color_problems", [])
+            # If custom config is set, parse and apply it
+            if custom_config_set and config_command:
+                writer({
+                    "agent": "wand_optimizer",
+                    "status": "info",
+                    "message": f"Applying custom command: {config_command[:100]}..."
+                })
+                
+                # Parse the ImageMagick command and apply with Wand
+                # Parse gamma
+                gamma_match = re.search(r'-gamma\s+([\d.]+)', config_command)
+                if gamma_match:
+                    gamma_value = float(gamma_match.group(1))
+                    img.gamma(gamma_value)
+                    writer({"agent": "wand_optimizer", "status": "info", "message": f"Applied gamma: {gamma_value}"})
+                
+                # Parse brightness-contrast
+                bc_match = re.search(r'-brightness-contrast\s+(-?\d+)x(-?\d+)', config_command)
+                if bc_match:
+                    brightness = int(bc_match.group(1))
+                    contrast = int(bc_match.group(2))
+                    img.brightness_contrast(brightness=brightness, contrast=contrast)
+                    writer({"agent": "wand_optimizer", "status": "info", "message": f"Applied brightness: {brightness}, contrast: {contrast}"})
+                
+                # Parse level
+                level_match = re.search(r'-level\s+(\d+)%,(\d+)%', config_command)
+                if level_match:
+                    black_point = float(level_match.group(1)) / 100.0
+                    white_point = float(level_match.group(2)) / 100.0
+                    img.level(black_point, white_point)
+                    writer({"agent": "wand_optimizer", "status": "info", "message": f"Applied levels: {black_point}-{white_point}"})
+                
+                # Parse modulate
+                mod_match = re.search(r'-modulate\s+(\d+),(\d+),(\d+)', config_command)
+                if mod_match:
+                    brightness_mod = int(mod_match.group(1))
+                    saturation = int(mod_match.group(2))
+                    hue = int(mod_match.group(3))
+                    img.modulate(brightness=brightness_mod, saturation=saturation, hue=hue)
+                    writer({"agent": "wand_optimizer", "status": "info", "message": f"Applied modulate: {brightness_mod},{saturation},{hue}"})
+                
+                # Parse unsharp mask
+                unsharp_match = re.search(r'-unsharp\s+([\d.]+)x([\d.]+)', config_command)
+                if unsharp_match:
+                    radius = float(unsharp_match.group(1))
+                    sigma = float(unsharp_match.group(2))
+                    img.unsharp_mask(radius=radius, sigma=sigma, amount=1.0, threshold=0.05)
+                    writer({"agent": "wand_optimizer", "status": "info", "message": f"Applied unsharp mask: {radius}x{sigma}"})
+                
+            else:
+                # Use AI-based adjustments (original logic)
+                lighting_issues = analysis.get("lighting_issues", [])
+                color_problems = analysis.get("color_problems", [])
+                
+                if "uneven_lighting" in lighting_issues or "harsh_shadows" in lighting_issues:
+                    # Sigmoidal contrast for better shadow/highlight balance
+                    img.sigmoidal_contrast(sharpen=True, strength=3, midpoint=0.5)
+                    writer({"agent": "wand_optimizer", "status": "info", "message": "Applied lighting corrections"})
+                
+                if "needs_vibrancy_boost" in color_problems:
+                    # Modulate for vibrancy (brightness, saturation, hue)
+                    img.modulate(brightness=105, saturation=115, hue=100)
+                    writer({"agent": "wand_optimizer", "status": "info", "message": "Enhanced vibrancy"})
+                
+                if "slight_color_cast" in lighting_issues:
+                    # Auto white balance
+                    img.auto_level()
+                    img.auto_gamma()
+                    writer({"agent": "wand_optimizer", "status": "info", "message": "Corrected color cast"})
+                
+                # 2. Material-specific Enhancements (only for AI mode)
+                materials = analysis.get("surface_materials", [])
             
-            if "uneven_lighting" in lighting_issues or "harsh_shadows" in lighting_issues:
-                # Sigmoidal contrast for better shadow/highlight balance
-                img.sigmoidal_contrast(sharpen=True, strength=3, midpoint=0.5)
-                writer({"agent": "wand_optimizer", "status": "info", "message": "Applied lighting corrections"})
+                if "chrome" in materials or "stainless_steel" in materials:
+                    # Enhance metallic surfaces with local contrast
+                    img.adaptive_sharpen(radius=1.0, sigma=0.5)
+                    # Increase contrast for reflections
+                    img.brightness_contrast(brightness=2, contrast=5)
+                    writer({"agent": "wand_optimizer", "status": "info", "message": "Enhanced metallic surfaces"})
             
-            if "needs_vibrancy_boost" in color_problems:
-                # Modulate for vibrancy (brightness, saturation, hue)
-                img.modulate(brightness=105, saturation=115, hue=100)
-                writer({"agent": "wand_optimizer", "status": "info", "message": "Enhanced vibrancy"})
+                if "wood_grain" in materials:
+                    # Enhance wood texture with edge enhancement
+                    with img.clone() as edge:
+                        edge.edge(radius=1)
+                        edge.negate()
+                        img.composite(edge, left=0, top=0, operator='multiply')
+                    # Warm up wood tones slightly
+                    img.colorize(color='#FFF5E6', alpha=0.05)
+                    writer({"agent": "wand_optimizer", "status": "info", "message": "Enhanced wood grain"})
             
-            if "slight_color_cast" in lighting_issues:
-                # Auto white balance
-                img.auto_level()
-                img.auto_gamma()
-                writer({"agent": "wand_optimizer", "status": "info", "message": "Corrected color cast"})
+                if "matte_surfaces" in materials:
+                    # Gentle enhancement for matte surfaces
+                    img.unsharp_mask(radius=0.5, sigma=0.5, amount=0.5, threshold=0.02)
+                    writer({"agent": "wand_optimizer", "status": "info", "message": "Enhanced matte surfaces"})
             
-            # 2. Material-specific Enhancements
-            materials = analysis.get("surface_materials", [])
-            
-            if "chrome" in materials or "stainless_steel" in materials:
-                # Enhance metallic surfaces with local contrast
-                img.adaptive_sharpen(radius=1.0, sigma=0.5)
-                # Increase contrast for reflections
-                img.brightness_contrast(brightness=2, contrast=5)
-                writer({"agent": "wand_optimizer", "status": "info", "message": "Enhanced metallic surfaces"})
-            
-            if "wood_grain" in materials:
-                # Enhance wood texture with edge enhancement
-                with img.clone() as edge:
-                    edge.edge(radius=1)
-                    edge.negate()
-                    img.composite(edge, left=0, top=0, operator='multiply')
-                # Warm up wood tones slightly
-                img.colorize(color='#FFF5E6', alpha=0.05)
-                writer({"agent": "wand_optimizer", "status": "info", "message": "Enhanced wood grain"})
-            
-            if "matte_surfaces" in materials:
-                # Gentle enhancement for matte surfaces
-                img.unsharp_mask(radius=0.5, sigma=0.5, amount=0.5, threshold=0.02)
-                writer({"agent": "wand_optimizer", "status": "info", "message": "Enhanced matte surfaces"})
-            
-            # 3. Sharpness and Detail Enhancement
-            # Professional unsharp mask settings
-            img.unsharp_mask(
+                # 3. Sharpness and Detail Enhancement (for AI mode)
+                # Professional unsharp mask settings
+                img.unsharp_mask(
                 radius=1.0,    # Radius of the Gaussian blur
                 sigma=0.5,     # Standard deviation of the Gaussian
                 amount=0.8,    # Percentage of the difference to add
                 threshold=0.05 # Threshold to prevent sharpening noise
             )
-            writer({"agent": "wand_optimizer", "status": "info", "message": "Applied professional sharpening"})
+                writer({"agent": "wand_optimizer", "status": "info", "message": "Applied professional sharpening"})
             
-            # 4. Dust and Spot Removal
-            if analysis.get("needs_dust_removal"):
+            # 4. Dust and Spot Removal (only if not using custom config and defect repair is enabled)
+            if not custom_config_set and os.getenv("USE_DEFECT_REPAIR") and analysis.get("needs_dust_removal"):
                 dust_issues = analysis.get("dust_issues", [])
                 if "spots" in dust_issues or "sensor_debris" in dust_issues:
                     # Use median filter for dust removal
                     img.statistic('median', width=3, height=3)
                     writer({"agent": "wand_optimizer", "status": "info", "message": "Removed dust spots"})
             
-            # 5. Final Quality Enhancements
-            # Reduce noise while preserving details
-            img.enhance()
+            # 5. Final Quality Enhancements (skip for custom config)
+            if not custom_config_set:
+                # Reduce noise while preserving details
+                img.enhance()
             
             # Ensure we maintain original resolution
             if img.width != original_width or img.height != original_height:

@@ -410,6 +410,7 @@ async def enhanced_agentic_processor(
         
         # 🎨 Stage 4: Gemini Editing (if strategy includes it)
         gemini_edited_path = None
+        
         if editing_strategy in ["gemini", "both"]:
             writer({
                 "stage": "gemini_editing",
@@ -417,11 +418,17 @@ async def enhanced_agentic_processor(
             })
             try:
                 gemini_edited_path = await run_gemini_edit_agent(current_image, analysis)
+                print(f"🎨 DEBUG: Gemini returned path: {gemini_edited_path}")
+                print(f"🎨 DEBUG: File exists: {os.path.exists(gemini_edited_path)}")
+                if os.path.exists(gemini_edited_path):
+                    file_size = os.path.getsize(gemini_edited_path)
+                    print(f"🎨 DEBUG: File size: {file_size} bytes")
                 current_image = gemini_edited_path
                 
                 writer({
                     "stage": "gemini_complete",
-                    "message": "Gemini editing completed successfully"
+                    "message": "Gemini editing completed successfully",
+                    "gemini_output": gemini_edited_path
                 })
             except AgentError as e:
                 writer({
@@ -459,12 +466,20 @@ async def enhanced_agentic_processor(
         # 🖼️ Stage 4.5: Background Removal (after Gemini editing)
         # Check if background removal is enabled by user (not just analysis suggestion)
         skip_background_removal = os.getenv("SKIP_BACKGROUND_REMOVAL", "false").lower() == "true"
+        print(f"🖼️ DEBUG: skip_background_removal env var: {skip_background_removal}")
+        print(f"🖼️ DEBUG: analysis.remove_background: {analysis.get('remove_background', False)}")
+        
+        # Only remove background if user EXPLICITLY enabled it (not just analysis recommendation)
+        # The analysis might recommend it by default, but we respect user's choice
         if not skip_background_removal and analysis.get("remove_background", False):
             writer({
                 "stage": "background_removal_final",
                 "message": "Removing background from enhanced image"
             })
+            print(f"🖼️ DEBUG: Running background removal on: {current_image}")
             bg_removed_final = await run_background_agent(current_image, analysis)
+            print(f"🖼️ DEBUG: Background removal returned: {bg_removed_final}")
+            
             if bg_removed_final != current_image:
                 # Track the intermediate PNG and WebP files created by background removal
                 png_file = str(Path(current_image).parent / f"{Path(current_image).stem}-no-bg.png")
@@ -474,6 +489,8 @@ async def enhanced_agentic_processor(
                 if os.path.exists(webp_file) and webp_file != bg_removed_final:
                     intermediate_files.append(webp_file)
             current_image = bg_removed_final
+        else:
+            print(f"🖼️ DEBUG: Skipping background removal (skip={skip_background_removal}, remove_bg={analysis.get('remove_background', False)})")
         
         # ✅ Stage 5: Enhanced Quality Control
         writer({
@@ -562,6 +579,9 @@ async def enhanced_agentic_processor(
             final_image_path = finalize_output_with_quality_and_cleanup(
                 final_image_path, final_quality, intermediate_files, passed_qc
             )
+            
+            print(f"✅ DEBUG: Final image path being returned: {final_image_path}")
+            print(f"✅ DEBUG: Final image exists: {os.path.exists(final_image_path)}")
             
             writer({
                 "workflow": "enhanced_success",

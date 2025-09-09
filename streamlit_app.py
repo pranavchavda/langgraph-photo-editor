@@ -18,6 +18,12 @@ from streamlit_local_storage import LocalStorage
 
 # Import our existing workflow
 from src.workflow_enhanced import process_single_image_enhanced
+try:
+    from src.preview_utils import generate_preview_from_sliders
+    PREVIEW_AVAILABLE = True
+except ImportError:
+    PREVIEW_AVAILABLE = False
+    print("Preview utils not available")
 
 # Try to use advanced lens corrections, fall back to basic if not available
 try:
@@ -45,6 +51,8 @@ if 'processing_metrics' not in st.session_state:
     st.session_state.processing_metrics = None
 if 'batch_results' not in st.session_state:
     st.session_state.batch_results = []
+if 'current_uploaded_file' not in st.session_state:
+    st.session_state.current_uploaded_file = None
 # Initialize LocalStorage
 localS = LocalStorage()
 
@@ -161,6 +169,16 @@ with st.sidebar:
                                  help="Traditional image processing for sharpening, color correction, and optimization. Disable to skip.")
     use_gemini = st.checkbox("Use Gemini AI Enhancement", value=False, 
                             help="Enable for AI-powered editing (lower resolution). Disable for traditional high-resolution processing.")
+    
+    # AI Upscaling option (only shows when using regular Gemini)
+    use_ai_upscaling = False
+    if use_gemini:
+        use_ai_upscaling = st.checkbox(
+            "🚀 Use Google AI Upscaling (Experimental)", 
+            value=False,
+            help="Experimental: Use Google AI to upscale images. Enhanced Lanczos (default) often provides better quality for product photos."
+        )
+    
     use_chunked_gemini = st.checkbox("Use Chunked Gemini (High-Res AI) 🆕", value=False,
                             help="Process high-resolution images through Gemini by intelligent chunking. Maintains full resolution with AI editing.")
     
@@ -199,6 +217,8 @@ with st.sidebar:
             help="Lower = only obvious defects, Higher = more aggressive detection"
         )
     
+    use_defect_repair = st.checkbox("Auto Dust & Scratch Repair 🧹", value=False,
+                            help="Automatically detect and remove dust spots, sensor debris, and scratches from images.")
     remove_background = st.checkbox("Remove Background", value=True)
     
     st.subheader("📷 Lens Corrections")
@@ -231,6 +251,144 @@ with st.sidebar:
                 value=focal_options[len(focal_options)//2],  # Default to middle
                 disabled=not apply_lens_correction
             )
+    
+    # Base ImageMagick Configuration Sliders
+    with st.expander("🎛️ ImageMagick Base Configuration (Advanced)", expanded=False):
+        st.markdown("Adjust the base settings for ImageMagick processing. These are the starting values before AI adjustments.")
+        
+        # Show live preview if image is uploaded
+        if st.session_state.current_uploaded_file is not None and PREVIEW_AVAILABLE:
+            preview_col, sliders_col = st.columns([1, 1])
+            
+            with preview_col:
+                st.markdown("### Live Preview")
+                preview_placeholder = st.empty()
+        else:
+            sliders_col = st.container()
+            preview_placeholder = None
+        
+        with sliders_col if st.session_state.current_uploaded_file else st.container():
+            col1_config, col2_config = st.columns(2)
+        
+            with col1_config:
+                base_gamma = st.slider(
+                    "Gamma",
+                    min_value=0.8,
+                    max_value=1.2,
+                    value=1.0,
+                    step=0.01,
+                    key="gamma_slider",
+                    help="Gamma correction (1.0 = neutral)"
+                )
+                
+                base_brightness = st.slider(
+                    "Brightness",
+                    min_value=-10,
+                    max_value=10,
+                    value=0,
+                    step=1,
+                    key="brightness_slider",
+                    help="Brightness adjustment"
+                )
+                
+                base_contrast = st.slider(
+                    "Contrast",
+                    min_value=-10,
+                    max_value=10,
+                    value=2,  # Darktable-inspired default
+                    step=1,
+                    key="contrast_slider",
+                    help="Contrast adjustment (2 = slight boost)"
+                )
+                
+                base_saturation = st.slider(
+                    "Saturation",
+                    min_value=90,
+                    max_value=120,
+                    value=108,  # Darktable-inspired default
+                    step=1,
+                    key="saturation_slider",
+                    help="Color saturation (100 = neutral)"
+                )
+            
+            with col2_config:
+                base_highlights = st.slider(
+                    "Highlights",
+                    min_value=-20,
+                    max_value=20,
+                    value=-5,  # Darktable-inspired default
+                    step=1,
+                    key="highlights_slider",
+                    help="Highlight recovery (negative = recover)"
+                )
+                
+                base_shadows = st.slider(
+                    "Shadows",
+                    min_value=-10,
+                    max_value=10,
+                    value=3,  # Darktable-inspired default
+                    step=1,
+                    key="shadows_slider",
+                    help="Shadow adjustment (positive = lift)"
+                )
+                
+                base_sharpness_radius = st.slider(
+                    "Sharpness Radius",
+                    min_value=0.5,
+                    max_value=2.0,
+                    value=1.0,  # Darktable-inspired default
+                    step=0.1,
+                    key="sharp_radius_slider",
+                    help="Unsharp mask radius"
+                )
+                
+                base_sharpness_sigma = st.slider(
+                    "Sharpness Sigma",
+                    min_value=0.3,
+                    max_value=1.0,
+                    value=0.5,  # Darktable-inspired default
+                    step=0.1,
+                    key="sharp_sigma_slider",
+                    help="Unsharp mask sigma"
+                )
+        
+            # Reset to defaults button
+            if st.button("Reset to Darktable Defaults", type="secondary"):
+                st.rerun()
+        
+        # Generate live preview if image is uploaded
+        if st.session_state.current_uploaded_file is not None and preview_placeholder is not None and PREVIEW_AVAILABLE:
+            try:
+                # Save uploaded file temporarily for preview
+                uploaded_file_data = st.session_state.current_uploaded_file
+                with tempfile.NamedTemporaryFile(delete=False, suffix=Path(uploaded_file_data['name']).suffix) as tmp_file:
+                    tmp_file.write(uploaded_file_data['data'])
+                    temp_path = tmp_file.name
+                
+                # Generate preview with current slider values
+                preview_bytes = generate_preview_from_sliders(
+                    source_image_path=temp_path,
+                    gamma=base_gamma,
+                    brightness=base_brightness,
+                    contrast=base_contrast,
+                    saturation=base_saturation,
+                    highlights=base_highlights,
+                    shadows=base_shadows,
+                    sharpness_radius=base_sharpness_radius,
+                    sharpness_sigma=base_sharpness_sigma,
+                    max_size=(400, 400)  # Smaller for faster updates
+                )
+                
+                # Display preview
+                with preview_placeholder.container():
+                    st.image(preview_bytes, caption="Preview (not full resolution)", use_container_width=True)
+                    st.caption("⚡ Real-time preview of adjustments")
+                
+                # Clean up temp file
+                os.unlink(temp_path)
+            except Exception as e:
+                with preview_placeholder.container():
+                    st.warning(f"Preview unavailable: {str(e)}")
     
     st.info("💡 Tip: API keys are saved in your browser and persist across sessions")
     st.caption(f"🔧 Lens corrections: {LENS_CORRECTION_METHOD}")
@@ -284,6 +442,15 @@ if mode == "🖼️ Single Image":
             type=['png', 'jpg', 'jpeg', 'webp'],
             key="single_upload"
         )
+        
+        # Store uploaded file in session state for preview access
+        if uploaded_file:
+            st.session_state.current_uploaded_file = {
+                'name': uploaded_file.name,
+                'data': uploaded_file.getvalue()
+            }
+        else:
+            st.session_state.current_uploaded_file = None
         
         if uploaded_file:
             image = Image.open(uploaded_file)
@@ -450,6 +617,12 @@ if mode == "🖼️ Single Image":
                                 else:
                                     os.environ["USE_TARGETED_ENHANCEMENT"] = "false"
                                 
+                                # Set AI upscaling flag
+                                if use_ai_upscaling:
+                                    os.environ["USE_AI_UPSCALING"] = "true"
+                                else:
+                                    os.environ["USE_AI_UPSCALING"] = "false"
+                                
                                 # Set lens correction preference
                                 if not apply_lens_correction:
                                     os.environ["SKIP_LENS_CORRECTION"] = "true"
@@ -475,6 +648,51 @@ if mode == "🖼️ Single Image":
                                 else:
                                     os.environ["SKIP_BACKGROUND_REMOVAL"] = "false"
                                 
+                                # Set defect repair flag
+                                if use_defect_repair:
+                                    os.environ["USE_DEFECT_REPAIR"] = "true"
+                                else:
+                                    os.environ.pop("USE_DEFECT_REPAIR", None)
+                                
+                                # Build custom base config from sliders
+                                # Check if we have the slider variables available
+                                if 'base_gamma' in locals():
+                                    print(f"🔍 DEBUG: base_gamma={base_gamma}, base_brightness={base_brightness}, base_contrast={base_contrast}, base_saturation={base_saturation}")
+                                    custom_base_parts = []
+                                    
+                                    # IMPORTANT: Order matters in ImageMagick!
+                                    
+                                    # 1. Gamma adjustment first (affects overall brightness)
+                                    if base_gamma != 1.0:
+                                        custom_base_parts.append(f"-gamma {base_gamma}")
+                                        print(f"🔍 Added gamma: {base_gamma}")
+                                    
+                                    # 2. Brightness/Contrast adjustments
+                                    if base_brightness != 0 or base_contrast != 0:
+                                        custom_base_parts.append(f"-brightness-contrast {base_brightness}x{base_contrast}")
+                                    
+                                    # 3. Highlight/Shadow adjustment using -level
+                                    if base_highlights != 0 or base_shadows != 0:
+                                        black_point = max(0, base_shadows)
+                                        white_point = min(100, 100 + base_highlights)
+                                        if black_point != 0 or white_point != 100:
+                                            custom_base_parts.append(f"-level {black_point}%,{white_point}%")
+                                    
+                                    # 4. Saturation
+                                    if base_saturation != 100:
+                                        custom_base_parts.append(f"-modulate 100,{base_saturation},100")
+                                    
+                                    # 5. Sharpening
+                                    custom_base_parts.append(f"-unsharp {base_sharpness_radius}x{base_sharpness_sigma}")
+                                    
+                                    # 6. Quality
+                                    custom_base_parts.append("-quality 95")
+                                    
+                                    # Set the custom base config
+                                    custom_config = " ".join(custom_base_parts)
+                                    os.environ["IMAGEMAGICK_BASE_CONFIG"] = custom_config
+                                    print(f"🎛️ Set custom ImageMagick config: {custom_config}")
+                                
                                 # The workflow already handles Pregel invocation internally
                                 result = asyncio.run(process_single_image_enhanced(
                                     image_path=process_path,
@@ -484,13 +702,28 @@ if mode == "🖼️ Single Image":
                             
                             if result.get("final_image"):
                                 output_path = result.get("final_image")
+                                print(f"📸 DEBUG: Result final_image path: {output_path}")
+                                print(f"📸 DEBUG: Path exists: {Path(output_path).exists() if output_path else 'None'}")
+                                
                                 if output_path and Path(output_path).exists():
+                                    # Check file size and type
+                                    file_size = os.path.getsize(output_path)
+                                    print(f"📸 DEBUG: Loading image from: {output_path} ({file_size} bytes)")
+                                    
                                     result_image = Image.open(output_path)
+                                    width, height = result_image.size
+                                    print(f"📸 DEBUG: Image dimensions: {width}x{height}")
                                     
                                     st.session_state.processed_image = result_image
                                     with open(output_path, "rb") as f:
                                         st.session_state.processed_image_data = f.read()
                                     st.session_state.processed_filename = f"enhanced_{uploaded_file.name}"
+                                    
+                                    # Debug: Check if this is a Gemini-edited image
+                                    if "gemini-edited" in output_path:
+                                        print(f"✅ DEBUG: This is a Gemini-edited image!")
+                                    else:
+                                        print(f"⚠️ DEBUG: Not a Gemini-edited image path")
                                     
                                     quality = result.get('final_quality', result.get('quality_score', 'N/A'))
                                     if quality != 'N/A':
@@ -607,6 +840,8 @@ elif mode == "📦 Batch Processing":
                                     help="Process high-resolution images through Gemini by intelligent chunking.")
         
         with col2b:
+            batch_use_defect_repair = st.checkbox("Auto Dust & Scratch Repair 🧹", value=False, key="batch_defect",
+                                    help="Automatically detect and remove dust spots, sensor debris, and scratches.")
             batch_remove_background = st.checkbox("Remove Background", value=True, key="batch_remove_bg")
             # Show 4K mode option when chunked Gemini is selected
             batch_use_4k_mode = False
@@ -652,6 +887,97 @@ elif mode == "📦 Batch Processing":
         
         if use_batch_consistency:
             st.info("📊 Batch consistency will analyze all images first to establish uniform processing parameters")
+        
+        # Base ImageMagick Configuration for Batch
+        with st.expander("🎛️ Batch ImageMagick Base Configuration (Advanced)", expanded=False):
+            st.markdown("Set consistent base settings for the entire batch. These values will be used for all images.")
+            
+            batch_col1_config, batch_col2_config = st.columns(2)
+            
+            with batch_col1_config:
+                batch_base_gamma = st.slider(
+                    "Gamma",
+                    min_value=0.8,
+                    max_value=1.2,
+                    value=1.0,
+                    step=0.01,
+                    key="batch_gamma",
+                    help="Gamma correction (1.0 = neutral)"
+                )
+                
+                batch_base_brightness = st.slider(
+                    "Brightness",
+                    min_value=-10,
+                    max_value=10,
+                    value=0,
+                    step=1,
+                    key="batch_brightness",
+                    help="Brightness adjustment"
+                )
+                
+                batch_base_contrast = st.slider(
+                    "Contrast",
+                    min_value=-10,
+                    max_value=10,
+                    value=2,
+                    step=1,
+                    key="batch_contrast",
+                    help="Contrast adjustment"
+                )
+                
+                batch_base_saturation = st.slider(
+                    "Saturation",
+                    min_value=90,
+                    max_value=120,
+                    value=108,
+                    step=1,
+                    key="batch_saturation",
+                    help="Color saturation"
+                )
+            
+            with batch_col2_config:
+                batch_base_highlights = st.slider(
+                    "Highlights",
+                    min_value=-20,
+                    max_value=20,
+                    value=-5,
+                    step=1,
+                    key="batch_highlights",
+                    help="Highlight recovery"
+                )
+                
+                batch_base_shadows = st.slider(
+                    "Shadows",
+                    min_value=-10,
+                    max_value=10,
+                    value=3,
+                    step=1,
+                    key="batch_shadows",
+                    help="Shadow adjustment"
+                )
+                
+                batch_base_sharpness_radius = st.slider(
+                    "Sharpness Radius",
+                    min_value=0.5,
+                    max_value=2.0,
+                    value=1.0,
+                    step=0.1,
+                    key="batch_sharp_radius",
+                    help="Unsharp mask radius"
+                )
+                
+                batch_base_sharpness_sigma = st.slider(
+                    "Sharpness Sigma",
+                    min_value=0.3,
+                    max_value=1.0,
+                    value=0.5,
+                    step=0.1,
+                    key="batch_sharp_sigma",
+                    help="Unsharp mask sigma"
+                )
+            
+            if st.button("Reset Batch to Darktable Defaults", type="secondary", key="batch_reset"):
+                st.rerun()
         
         st.subheader("✏️ Batch Instructions")
         batch_instructions = st.text_area(
@@ -751,6 +1077,48 @@ elif mode == "📦 Batch Processing":
                                 os.environ["SKIP_BACKGROUND_REMOVAL"] = "true"
                             else:
                                 os.environ["SKIP_BACKGROUND_REMOVAL"] = "false"
+                            
+                            # Set defect repair flag
+                            if batch_use_defect_repair:
+                                os.environ["USE_DEFECT_REPAIR"] = "true"
+                            else:
+                                os.environ.pop("USE_DEFECT_REPAIR", None)
+                            
+                            # Build custom batch base config from sliders
+                            if 'batch_base_gamma' in locals():
+                                batch_base_parts = []
+                                
+                                # IMPORTANT: Order matters in ImageMagick!
+                                
+                                # 1. Gamma adjustment first
+                                if batch_base_gamma != 1.0:
+                                    batch_base_parts.append(f"-gamma {batch_base_gamma}")
+                                
+                                # 2. Brightness/Contrast
+                                if batch_base_brightness != 0 or batch_base_contrast != 0:
+                                    batch_base_parts.append(f"-brightness-contrast {batch_base_brightness}x{batch_base_contrast}")
+                                
+                                # 3. Highlight/Shadow adjustment
+                                if batch_base_highlights != 0 or batch_base_shadows != 0:
+                                    black_point = max(0, batch_base_shadows)
+                                    white_point = min(100, 100 + batch_base_highlights)
+                                    if black_point != 0 or white_point != 100:
+                                        batch_base_parts.append(f"-level {black_point}%,{white_point}%")
+                                
+                                # 4. Saturation
+                                if batch_base_saturation != 100:
+                                    batch_base_parts.append(f"-modulate 100,{batch_base_saturation},100")
+                                
+                                # 5. Sharpening
+                                batch_base_parts.append(f"-unsharp {batch_base_sharpness_radius}x{batch_base_sharpness_sigma}")
+                                
+                                # 6. Quality
+                                batch_base_parts.append("-quality 95")
+                                
+                                # Set the batch base config for consistency
+                                batch_config = " ".join(batch_base_parts)
+                                os.environ["BATCH_IMAGEMAGICK_BASE"] = batch_config
+                                print(f"🎛️ Set batch ImageMagick config: {batch_config}")
                             
                             # The workflow already handles Pregel invocation internally
                             result = await process_single_image_enhanced(
@@ -1073,6 +1441,12 @@ elif mode == "❓ Help & Guide":
         - ✅ Gives consistent results
         
         **Turn OFF only if:** You want pure AI enhancement without any traditional processing
+        
+        **🆕 Custom Base Configuration:**
+        - Adjust starting values with sliders in the sidebar
+        - Live preview shows real-time effect on your image
+        - Based on professional Darktable settings
+        - AI adjustments are applied on top of your base settings
         """)
     
     with st.expander("**Gemini AI Enhancement** (Default: OFF)"):
@@ -1114,7 +1488,7 @@ elif mode == "❓ Help & Guide":
         **Best for:** Products with mixed materials needing selective enhancement
         """)
     
-    with st.expander("**Auto Defect Repair** 🔧 🆕"):
+    with st.expander("**Auto Defect Repair** 🔧"):
         st.markdown("""
         **What it does:** Automatically detects and repairs dust, scratches, and sensor defects
         
@@ -1133,7 +1507,10 @@ elif mode == "❓ Help & Guide":
         - Sensor dust spots from camera
         - Small imperfections that shouldn't be there
         
-        **Note:** Can be slow on large images. May remove intentional texture on very sensitive settings.
+        **Note:** 
+        - Can be slow on large images
+        - May remove intentional texture on very sensitive settings
+        - When disabled, dust detection is removed from AI analysis prompt
         """)
     
     with st.expander("**Background Removal** (Default: ON)"):
@@ -1160,6 +1537,48 @@ elif mode == "❓ Help & Guide":
         - Barrel distortion (curved edges)
         - Dark corners (vignetting)
         - Color fringing
+        """)
+    
+    with st.expander("**🎛️ ImageMagick Base Configuration** 🆕"):
+        st.markdown("""
+        **What it does:** Lets you customize the starting point for image processing
+        
+        **Available Sliders:**
+        - **Gamma (0.8-1.2):** Adjusts midtone brightness
+        - **Brightness (-10 to +10):** Overall lightness
+        - **Contrast (-10 to +10):** Difference between light and dark
+        - **Saturation (90-120):** Color intensity
+        - **Highlights (-10 to 0):** Brightest areas control
+        - **Shadows (0 to +10):** Darkest areas control
+        - **Sharpness Radius & Sigma:** Edge enhancement
+        
+        **Live Preview Feature:**
+        - See changes in real-time as you adjust sliders
+        - Preview appears when image is uploaded
+        - Fast approximation for instant feedback
+        - Final result will be even better quality
+        
+        **Pro Tips:**
+        - Start with Darktable defaults (already set)
+        - Make small adjustments and preview
+        - AI will still optimize on top of your settings
+        - Click "Reset to Darktable Defaults" to start over
+        """)
+    
+    with st.expander("**🚀 AI Upscaling** (Experimental)"):
+        st.markdown("""
+        **What it does:** Upscales lower resolution Gemini outputs back to original size
+        
+        **Methods Available:**
+        - **Enhanced Lanczos (Default):** Fast, high-quality local upscaling with sharpening
+        - **Google AI Upscaling:** Cloud-based AI upscaling (experimental, variable quality)
+        
+        **When it's used:**
+        - Automatically after Gemini AI editing (outputs at 1024x1024)
+        - Restores images to original resolution
+        - Applies smart sharpening to compensate for upscaling
+        
+        **Note:** Enhanced Lanczos provides excellent results for most product photos
         """)
     
     # Tips & Tricks
@@ -1283,11 +1702,14 @@ Settings:
     ### The AI Pipeline Process:
     
     1. **📊 Analysis** - Claude examines your image and identifies issues
-    2. **📷 Lens Correction** - Fixes optical distortions (if enabled)
-    3. **✨ Enhancement** - ImageMagick and/or Gemini improve the image
-    4. **🖼️ Background Removal** - Creates transparent background (if enabled)
-    5. **🎯 Targeted Enhancement** - Surgical improvements to specific areas (if enabled)
-    6. **✅ Quality Control** - Claude checks the result and may retry if needed
+    2. **🔧 Defect Detection** - Finds dust/scratches (if enabled)
+    3. **🩹 Defect Repair** - G'MIC/OpenCV repairs defects (if enabled)
+    4. **📷 Lens Correction** - Fixes optical distortions (if enabled)
+    5. **✨ Enhancement** - ImageMagick (with your base config) and/or Gemini improve the image
+    6. **🖼️ Background Removal** - Creates transparent background (if enabled)
+    7. **🎯 Targeted Enhancement** - Surgical improvements to specific areas (if enabled)
+    8. **📐 Upscaling** - Restores resolution after AI editing (automatic)
+    9. **✅ Quality Control** - Claude checks the result and may retry if needed
     
     Each step is optimized for product photography!
     """)
@@ -1305,6 +1727,13 @@ Settings:
     
     💡 **Pro Tip**: Start with conservative settings and increase enhancement gradually. 
     Less is often more in product photography!
+    
+    ### Recent Updates 🆕
+    - **Real-time preview** for ImageMagick adjustments
+    - **Custom base configuration** with Darktable-inspired defaults
+    - **Enhanced Lanczos upscaling** for better Gemini output quality
+    - **Smarter dust detection** - only when defect repair is enabled
+    - **Unified Wand agent** for more reliable ImageMagick processing
     """)
 
 # Footer

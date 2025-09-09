@@ -45,6 +45,70 @@ class AgentError(Exception):
     pass
 
 
+# Base ImageMagick configuration inspired by Darktable XMP settings
+# These values are derived from analyzing professional photo editing presets
+IMAGEMAGICK_BASE_CONFIG = {
+    "gamma": 1.0,           # Base gamma (0.8-1.2) - Darktable uses neutral
+    "brightness": 0,        # Brightness adjustment (-10 to +10)
+    "contrast": 2,          # Slight contrast boost inspired by RGB levels
+    "saturation": 108,      # Slightly increased saturation (was 105)
+    "sharpness": "1.0x0.5", # Moderate sharpening (Darktable sharpen enabled)
+    "highlights": -5,       # Slight highlight recovery (Darktable highlights enabled)
+    "shadows": 3,           # Slight shadow lift from RGB levels midpoint ~0.613
+    "quality": 95,          # Output quality
+}
+
+def get_base_imagemagick_command():
+    """Get the base ImageMagick command with Darktable-inspired optimizations"""
+    # Allow environment variable override
+    custom_base = os.getenv('IMAGEMAGICK_BASE_CONFIG')
+    if custom_base:
+        print(f"🎛️ Using custom base config: {custom_base}")
+        return custom_base
+    
+    config = IMAGEMAGICK_BASE_CONFIG
+    print(f"🎛️ Using default base config with gamma={config['gamma']}, brightness={config['brightness']}, contrast={config['contrast']}, saturation={config['saturation']}")
+    
+    # Build base command
+    cmd_parts = []
+    
+    # IMPORTANT: Order matters in ImageMagick!
+    
+    # 1. Gamma adjustment first (affects overall brightness)
+    if config["gamma"] != 1.0:
+        cmd_parts.append(f"-gamma {config['gamma']}")
+    
+    # 2. Brightness/Contrast adjustments
+    if config["brightness"] != 0 or config["contrast"] != 0:
+        cmd_parts.append(f"-brightness-contrast {config['brightness']}x{config['contrast']}")
+    
+    # 3. Highlight/Shadow adjustment using -level
+    highlights = config.get("highlights", 0)
+    shadows = config.get("shadows", 0)
+    if highlights != 0 or shadows != 0:
+        # For highlights: negative value darkens highlights
+        # For shadows: positive value lifts shadows
+        # Convert to level black/white points (0-100 range)
+        black_point = max(0, shadows)  # Lift shadows
+        white_point = min(100, 100 + highlights)  # Compress highlights
+        if black_point != 0 or white_point != 100:
+            cmd_parts.append(f"-level {black_point}%,{white_point}%")
+    
+    # 4. Saturation via modulate (brightness,saturation,hue)
+    if config["saturation"] != 100:
+        cmd_parts.append(f"-modulate 100,{config['saturation']},100")
+    
+    # 5. Sharpening (should be near the end)
+    if config["sharpness"]:
+        cmd_parts.append(f"-unsharp {config['sharpness']}")
+    
+    # 6. Output quality
+    cmd_parts.append(f"-quality {config['quality']}")
+    
+    final_command = " ".join(cmd_parts)
+    print(f"🎛️ Final ImageMagick command: {final_command}")
+    return final_command
+
 def get_imagemagick_command():
     """Get the correct ImageMagick command for the platform"""
     import shutil
@@ -87,6 +151,61 @@ def get_image_media_type(image_path: str) -> str:
         return media_types.get(ext, 'image/jpeg')
 
 
+def build_adjusted_imagemagick_command(base_command: str, adjustments: dict) -> str:
+    """Apply adjustments to base ImageMagick command"""
+    if not adjustments:
+        return base_command
+    
+    import re
+    command = base_command
+    
+    # Apply gamma delta
+    if 'gamma_delta' in adjustments:
+        gamma_match = re.search(r'-gamma\s+([\d.]+)', command)
+        if gamma_match:
+            current_gamma = float(gamma_match.group(1))
+            new_gamma = max(0.8, min(1.2, current_gamma + adjustments['gamma_delta']))
+            command = re.sub(r'-gamma\s+[\d.]+', f'-gamma {new_gamma}', command)
+        else:
+            new_gamma = max(0.8, min(1.2, 1.0 + adjustments['gamma_delta']))
+            if new_gamma != 1.0:
+                command = f"-gamma {new_gamma} {command}"
+    
+    # Apply brightness/contrast deltas
+    if 'brightness_delta' in adjustments or 'contrast_delta' in adjustments:
+        bc_match = re.search(r'-brightness-contrast\s+(-?\d+)x(-?\d+)', command)
+        if bc_match:
+            current_brightness = int(bc_match.group(1))
+            current_contrast = int(bc_match.group(2))
+        else:
+            current_brightness = 0
+            current_contrast = 0
+        
+        new_brightness = max(-5, min(5, current_brightness + adjustments.get('brightness_delta', 0)))
+        new_contrast = max(-5, min(5, current_contrast + adjustments.get('contrast_delta', 0)))
+        
+        if bc_match:
+            command = re.sub(r'-brightness-contrast\s+-?\d+x-?\d+', 
+                            f'-brightness-contrast {new_brightness}x{new_contrast}', command)
+        else:
+            if new_brightness != 0 or new_contrast != 0:
+                command = f"-brightness-contrast {new_brightness}x{new_contrast} {command}"
+    
+    # Apply saturation delta
+    if 'saturation_delta' in adjustments:
+        mod_match = re.search(r'-modulate\s+(\d+),(\d+),(\d+)', command)
+        if mod_match:
+            current_saturation = int(mod_match.group(2))
+            new_saturation = max(90, min(120, current_saturation + adjustments['saturation_delta']))
+            command = re.sub(r'-modulate\s+\d+,\d+,\d+', 
+                            f'-modulate 100,{new_saturation},100', command)
+        else:
+            new_saturation = max(90, min(120, 105 + adjustments['saturation_delta']))
+            if new_saturation != 100:
+                command = f"-modulate 100,{new_saturation},100 {command}"
+    
+    return command
+
 async def enhanced_analysis_agent(image_path: str, custom_instructions: Optional[str] = None) -> Dict[str, Any]:
     """
     🔍 Enhanced Analysis Agent - Claude Sonnet 4 analyzes image and decides editing strategy
@@ -94,6 +213,10 @@ async def enhanced_analysis_agent(image_path: str, custom_instructions: Optional
     Now determines whether to use Gemini 2.5 Flash Image editing or ImageMagick optimization
     """
     writer = get_stream_writer()
+    
+    # Check user's background removal preference  
+    skip_bg_removal = os.getenv("SKIP_BACKGROUND_REMOVAL", "false").lower() == "true"
+    print(f"📊 Analysis: User's background removal preference: {'disabled' if skip_bg_removal else 'enabled'}")
     
     writer({
         "agent": "analysis", 
@@ -105,25 +228,44 @@ async def enhanced_analysis_agent(image_path: str, custom_instructions: Optional
     image_base64 = encode_image_to_base64(image_path)
     media_type = get_image_media_type(image_path)
     
+    # Format background removal preference for the prompt
+    bg_removal_preference = "disabled by user" if skip_bg_removal else "enabled by user"
+    bg_removal_setting = "false" if skip_bg_removal else "true"
+    
+    # Get base ImageMagick configuration
+    base_imagemagick = get_base_imagemagick_command()
+    
+    # Check if defect repair is enabled
+    use_defect_repair = os.getenv("USE_DEFECT_REPAIR")
+    
+    # Build evaluation criteria based on settings
+    evaluation_criteria = [
+        "- **Lens Distortion**: Barrel distortion, pincushion distortion, vignetting, chromatic aberration",
+        "- **Surface Materials**: Chrome, stainless steel, matte surfaces, glass, plastic",
+        "- **Lighting Issues**: Harsh shadows, overexposure, uneven lighting, color casts",
+    ]
+    
+    if use_defect_repair:
+        evaluation_criteria.append("- **Dust and Sensor Debris**: Visible dust spots, sensor debris, dirt on surfaces")
+    
+    evaluation_criteria.extend([
+        "- **Complex Problems**: Artifacts, unwanted objects, background issues",
+        "- **Color Quality**: Saturation, vibrancy, accuracy needs"
+    ])
+    
     # Enhanced analysis prompt for hybrid workflow
-    analysis_prompt = """
+    analysis_prompt = f"""
     Analyze this product image and determine the optimal editing strategy. You must decide between:
     1. **Gemini 2.5 Flash Image** - Advanced AI editing for complex tasks
     2. **ImageMagick** - Traditional optimization for simple adjustments
     
     Evaluate the image for:
-    - **Lens Distortion**: Barrel distortion, pincushion distortion, vignetting, chromatic aberration
-    - **Surface Materials**: Chrome, stainless steel, matte surfaces, glass, plastic
-    - **Lighting Issues**: Harsh shadows, overexposure, uneven lighting, color casts
-    - **Dust and Sensor Debris**: Visible dust spots, sensor debris, dirt on surfaces
-    - **Complex Problems**: Artifacts, unwanted objects, background issues
-    - **Color Quality**: Saturation, vibrancy, accuracy needs
+{chr(10).join(evaluation_criteria)}
     
     **GEMINI EDITING** is best for:
     - Complex lighting corrections and color casts
     - Selective object editing (enhance chrome without affecting other areas)
-    - Background modifications and artifact removal
-    - Dust and sensor debris removal
+    - Background modifications and artifact removal{' and dust/debris removal' if use_defect_repair else ''}
     - Advanced color correction
     
     **IMAGEMAGICK** is sufficient for:
@@ -131,6 +273,18 @@ async def enhanced_analysis_agent(image_path: str, custom_instructions: Optional
     - Basic color saturation changes
     - Sharpening and noise reduction
     - Straightforward optimizations
+    
+    **IMAGEMAGICK BASE CONFIGURATION**:
+    Base command: {base_imagemagick}
+    
+    Suggest ADJUSTMENTS as deltas from the base:
+    - gamma_delta: -0.2 to +0.2 (e.g., +0.02 for slight brightening)
+    - brightness_delta: -5 to +5 (e.g., +2 for darker images)
+    - contrast_delta: -5 to +5 (e.g., +3 for low contrast)
+    - saturation_delta: -15 to +15 (e.g., +5 for more vibrancy)
+    
+    Provide empty adjustments dict {{}} to use base config as-is.
+    Example adjustments: {{"gamma_delta": 0.02, "contrast_delta": 2}}
     
     **IMAGEMAGICK EXPOSURE SAFETY**:
     - AVOID aggressive brightness adjustments that cause overexposure
@@ -151,28 +305,28 @@ async def enhanced_analysis_agent(image_path: str, custom_instructions: Optional
     - You may still report lens_issues and needs_lens_correction for downstream processing by lensfun.
     
     **BACKGROUND REMOVAL POLICY**:
-    - Background removal is ENABLED by default for all product photography
-    - Only set remove_background: false if user explicitly requests "no background removal", "keep background", or "no bg removal"
-    - For e-commerce and product photos, transparent backgrounds are preferred
+    - User's preference: {bg_removal_preference}
+    - You MUST respect the user's preference above all else
+    - Set remove_background: {bg_removal_setting}
+    - Do not override based on image type when user has made a choice
     
     Return analysis as JSON with:
     - lens_issues: [detected lens distortions: barrel, pincushion, vignetting, chromatic_aberration]
     - needs_lens_correction: boolean (true if lens issues detected)
-    - lens_corrections_applied: boolean (true if lens corrections will be applied by dedicated lens correction step)
-    - dust_issues: [detected dust problems: spots, sensor_debris, surface_dirt]
-    - needs_dust_removal: boolean (true if dust issues detected)
+    - lens_corrections_applied: boolean (true if lens corrections will be applied by dedicated lens correction step){'\n    - dust_issues: [detected dust problems: spots, sensor_debris, surface_dirt]\n    - needs_dust_removal: boolean (true if dust issues detected)' if use_defect_repair else ''}
     - surface_materials: [materials detected]
     - lighting_issues: [specific problems]
     - color_problems: [color issues]
     - complex_problems: [issues requiring AI editing]
     - editing_strategy: "gemini" or "imagemagick" or "both"
     - gemini_instructions: string (detailed instructions for Gemini editing, exclude lens corrections)
-    - imagemagick_command: string (ImageMagick parameters, if needed)
+    - imagemagick_command: string (full ImageMagick command with base + adjustments)
+    - imagemagick_adjustments: dict (deltas from base: gamma_delta, brightness_delta, contrast_delta, saturation_delta)
     - editing_explanation: string (why this strategy was chosen)
     - remove_background: boolean (default: true, unless user explicitly says no)
     - optimization_priority: [ordered list of what to focus on]
     - needs_cropping: boolean (true if composition could be improved by cropping)
-    - crop_suggestion: "auto" or dict with {left, top, width, height} or null
+    - crop_suggestion: "auto" or dict with {{left, top, width, height}} or null
     """
     
     # Add custom instructions
@@ -255,8 +409,9 @@ async def enhanced_analysis_agent(image_path: str, custom_instructions: Optional
                     "status": "info",
                     "message": "Applying batch consistency parameters"
                 })
-                # Use batch-consistent ImageMagick command
-                analysis_result['imagemagick_command'] = os.getenv('BATCH_IMAGEMAGICK_BASE')
+                # Note: The actual batch base will be picked up by imagemagick_agent
+                # We just need to clear adjustments to use base as-is
+                analysis_result['imagemagick_adjustments'] = {}
                 
                 # Prepend batch template to Gemini instructions
                 batch_template = os.getenv('BATCH_GEMINI_TEMPLATE', '')
@@ -284,7 +439,8 @@ async def enhanced_analysis_agent(image_path: str, custom_instructions: Optional
                 "complex_problems": [],
                 "editing_strategy": "imagemagick",
                 "gemini_instructions": "",
-                "imagemagick_command": "-gamma 1.02 -modulate 100,108,100 -unsharp 0x1",
+                "imagemagick_command": get_base_imagemagick_command(),
+                "imagemagick_adjustments": {},
                 "editing_explanation": "Fallback to basic optimization",
                 "remove_background": True,
                 "optimization_priority": ["brightness", "contrast", "saturation"],
@@ -351,14 +507,14 @@ async def gemini_edit_agent(image_path: str, analysis: Dict[str, Any]) -> str:
         
         print(f"📊 Image size: {len(image_data)} bytes")
         
-        # Check if dust removal is needed
-        needs_dust_removal = analysis.get("needs_dust_removal", False)
-        dust_issues = analysis.get("dust_issues", [])
-        
-        # Create prompt for Gemini
+        # Check if dust removal is needed (only if defect repair is enabled)
         dust_removal_text = ""
-        if needs_dust_removal and dust_issues:
-            dust_removal_text = f"""
+        if os.getenv("USE_DEFECT_REPAIR"):
+            needs_dust_removal = analysis.get("needs_dust_removal", False)
+            dust_issues = analysis.get("dust_issues", [])
+            
+            if needs_dust_removal and dust_issues:
+                dust_removal_text = f"""
         IMPORTANT - Remove Visible Dust and Sensor Debris:
         Detected issues: {", ".join(dust_issues)}
         
@@ -403,88 +559,105 @@ async def gemini_edit_agent(image_path: str, analysis: Dict[str, Any]) -> str:
         
         print("DEBUG: Received response from Gemini")
         print(f"DEBUG: Response type: {type(response)}")
-        print(f"DEBUG: Response candidates: {len(response.candidates) if response.candidates else 0}")
+        
+        # Debug: Print the raw response structure
+        import json
+        try:
+            if hasattr(response, 'to_dict'):
+                print(f"DEBUG: Response dict: {json.dumps(response.to_dict(), indent=2)[:1000]}...")
+        except:
+            print(f"DEBUG: Response object: {response}")
+        
+        print(f"DEBUG: Response candidates: {len(response.candidates) if hasattr(response, 'candidates') and response.candidates else 0}")
         
         # Save edited image in same folder as original
         output_path = str(Path(image_path).parent / f"{Path(image_path).stem}-gemini-edited.webp")
         
         print("✅ Response received from Gemini")
         
-        # Extract image from response - Gemini 2.5 Flash Image returns inline_data
+        
+        # Extract image from response - simplified version
         image_saved = False
         
-        if response.candidates and len(response.candidates) > 0:
-            candidate = response.candidates[0]
-            print(f"DEBUG: Candidate content: {candidate.content}")
-            print(f"DEBUG: Candidate parts: {len(candidate.content.parts) if candidate.content and candidate.content.parts else 0}")
-            if candidate.content and candidate.content.parts:
-                for i, part in enumerate(candidate.content.parts):
-                    print(f"DEBUG: Part {i} type: {type(part)}")
-                    print(f"DEBUG: Part {i} has inline_data: {hasattr(part, 'inline_data')}")
-                    if hasattr(part, 'text'):
-                        print(f"DEBUG: Part {i} text: {part.text[:200]}..." if len(str(part.text)) > 200 else f"DEBUG: Part {i} text: {part.text}")
-                    if hasattr(part, 'inline_data') and part.inline_data:
-                        print(f"✅ Found edited image data ({part.inline_data.mime_type}, {len(part.inline_data.data)} bytes)")
-                        try:
-                            # The data is already decoded binary image data, not base64!
-                            image_data = part.inline_data.data
-                            # Validate image format
-                            if len(image_data) >= 4:
-                                if image_data[:4] == b'\x89PNG':
-                                    print("📸 Valid PNG format detected")
-                                elif image_data[:3] == b'\xff\xd8\xff':
-                                    print("📸 Valid JPEG format detected") 
-                                elif image_data[:4] == b'RIFF':
-                                    print("📸 Valid WebP format detected")
-                                else:
-                                    print("⚠️  Unknown image format, saving anyway")
-                            
-                            print(f"💾 Processing edited image ({len(image_data)} bytes)...")
-                            
-                            # Load the edited image to check resolution
-                            from PIL import Image
-                            import io
-                            edited_img = Image.open(io.BytesIO(image_data))
-                            edited_width, edited_height = edited_img.size
-                            
-                            # Load original to get target resolution
-                            original_img = Image.open(image_path)
-                            original_width, original_height = original_img.size
-                            
-                            print(f"📐 Gemini output: {edited_width}x{edited_height}, Original: {original_width}x{original_height}")
-                            
-                            # Check if upscaling is needed (if resolution dropped by more than 10%)
-                            if edited_width < original_width * 0.9 or edited_height < original_height * 0.9:
-                                print(f"⬆️ Upscaling from {edited_width}x{edited_height} to {original_width}x{original_height}")
+        try:
+            if response.candidates:
+                for candidate in response.candidates:
+                    if candidate.content and candidate.content.parts:
+                        for part in candidate.content.parts:
+                            if hasattr(part, 'inline_data') and part.inline_data:
+                                print(f"✅ Found edited image ({part.inline_data.mime_type}, {len(part.inline_data.data)} bytes)")
                                 
-                                # Use high-quality Lanczos resampling for upscaling
-                                edited_img = edited_img.resize(
-                                    (original_width, original_height), 
-                                    Image.Resampling.LANCZOS
-                                )
+                                # Load the image
+                                from PIL import Image
+                                import io
+                                img = Image.open(io.BytesIO(part.inline_data.data))
+                                edited_width, edited_height = img.size
                                 
-                                # Apply unsharp mask to improve quality after upscaling
-                                from PIL import ImageFilter
-                                edited_img = edited_img.filter(ImageFilter.UnsharpMask(radius=1, percent=50, threshold=3))
+                                # Get original dimensions
+                                original_img = Image.open(image_path)
+                                original_width, original_height = original_img.size
                                 
-                                print(f"✅ Upscaled to original resolution: {original_width}x{original_height}")
-                            
-                            # Save the final image
-                            edited_img.save(output_path, 'WEBP', quality=95)
-                            
-                            # Verify the file was written correctly
-                            import os
-                            actual_file_size = os.path.getsize(output_path)
-                            if actual_file_size > 0:
-                                print(f"✅ Successfully saved: {Path(output_path).name} ({actual_file_size:,} bytes)")
-                                image_saved = True
-                            else:
-                                print(f"❌ File write failed: file size is 0")
-                                raise Exception(f"File write verification failed")
-                            break
-                        except Exception as e:
-                            print(f"❌ Error saving image: {e}")
-                            continue
+                                print(f"📐 Gemini output: {edited_width}x{edited_height}, Original: {original_width}x{original_height}")
+                                
+                                # Check if AI upscaling is enabled and needed
+                                use_ai_upscaling = os.getenv('USE_AI_UPSCALING', 'false').lower() == 'true'
+                                needs_upscaling = edited_width < original_width * 0.9 or edited_height < original_height * 0.9
+                                
+                                if use_ai_upscaling and needs_upscaling:
+                                    print(f"⬆️ Upscaling needed from {edited_width}x{edited_height} to {original_width}x{original_height}")
+                                    print("🤖 Using Google AI upscaling...")
+                                    
+                                    try:
+                                        # Save current image to temp file
+                                        temp_path = f"/tmp/gemini_temp_{Path(image_path).stem}.png"
+                                        img.save(temp_path, 'PNG')
+                                        
+                                        # Use AI upscaler
+                                        from src.ai_upscaler_agent import upscale_with_ai
+                                        upscale_result = await upscale_with_ai(
+                                            image_path=temp_path,
+                                            target_width=original_width,
+                                            target_height=original_height,
+                                            output_path=temp_path,
+                                            service="vertex"
+                                        )
+                                        
+                                        if upscale_result["status"] == "success":
+                                            print(f"✅ AI upscaling successful!")
+                                            img = Image.open(temp_path)
+                                        else:
+                                            print(f"⚠️ AI upscaling failed: {upscale_result.get('error', 'Unknown')}")
+                                            print("📐 Using local Lanczos upscaling...")
+                                            img = img.resize((original_width, original_height), Image.Resampling.LANCZOS)
+                                    except Exception as e:
+                                        print(f"⚠️ AI upscaling error: {e}")
+                                        print("📐 Using local Lanczos upscaling...")
+                                        img = img.resize((original_width, original_height), Image.Resampling.LANCZOS)
+                                elif needs_upscaling:
+                                    print(f"📐 Using enhanced local Lanczos upscaling")
+                                    img = img.resize((original_width, original_height), Image.Resampling.LANCZOS)
+                                    # Apply better sharpening for upscaled images
+                                    from PIL import ImageFilter
+                                    img = img.filter(ImageFilter.UnsharpMask(
+                                        radius=1.5,
+                                        percent=80,
+                                        threshold=2
+                                    ))
+                                
+                                # Save the final image
+                                img.save(output_path, 'WEBP', quality=95)
+                                
+                                # Verify it was saved
+                                if os.path.getsize(output_path) > 0:
+                                    print(f"✅ Saved Gemini output to: {Path(output_path).name}")
+                                    image_saved = True
+                                    break
+                    if image_saved:
+                        break
+        except Exception as e:
+            print(f"❌ Error extracting Gemini image: {e}")
+            import traceback
+            traceback.print_exc()
         
         if not image_saved:
             print("❌ No edited image found in Gemini response")
@@ -513,6 +686,7 @@ async def gemini_edit_agent(image_path: str, analysis: Dict[str, Any]) -> str:
         raise AgentError(error_msg)
 
 
+
 async def imagemagick_optimization_agent(image_path: str, analysis: Dict[str, Any]) -> str:
     """
     ⚡ ImageMagick Optimization Agent - Traditional image processing
@@ -525,7 +699,72 @@ async def imagemagick_optimization_agent(image_path: str, analysis: Dict[str, An
         "message": f"Applying ImageMagick optimizations"
     })
     
-    imagemagick_command = analysis.get("imagemagick_command", "-enhance")
+    # Start with base configuration and apply adjustments
+    # Check for batch base config first, then custom base, then default
+    custom_config_set = False
+    
+    # Debug environment variables
+    batch_config = os.getenv('BATCH_IMAGEMAGICK_BASE')
+    custom_config = os.getenv('IMAGEMAGICK_BASE_CONFIG')
+    
+    writer({
+        "agent": "imagemagick",
+        "status": "debug",
+        "message": f"ENV CHECK - BATCH: {batch_config[:50] if batch_config else 'None'}, CUSTOM: {custom_config[:50] if custom_config else 'None'}"
+    })
+    
+    if batch_config:
+        base_command = batch_config
+        writer({
+            "agent": "imagemagick",
+            "status": "info",
+            "message": "Using batch base configuration (no adjustments will be applied)"
+        })
+        custom_config_set = True
+    elif custom_config:
+        # User has set custom config via sliders
+        base_command = custom_config
+        writer({
+            "agent": "imagemagick",
+            "status": "info",
+            "message": "Using custom slider configuration (no adjustments will be applied)"
+        })
+        custom_config_set = True
+    else:
+        # Use default base command
+        base_command = get_base_imagemagick_command()
+        writer({
+            "agent": "imagemagick",
+            "status": "info",
+            "message": "Using default base configuration"
+        })
+    
+    adjustments = analysis.get("imagemagick_adjustments", {})
+    
+    # Only apply adjustments if NO custom config is set
+    # When user sets custom config, they want exact control
+    if adjustments and not custom_config_set:
+        writer({
+            "agent": "imagemagick",
+            "status": "info",
+            "message": f"Applying AI adjustments: {adjustments}"
+        })
+        imagemagick_command = build_adjusted_imagemagick_command(base_command, adjustments)
+    else:
+        # Use base command directly (either custom or default)
+        imagemagick_command = base_command
+        if adjustments and custom_config_set:
+            writer({
+                "agent": "imagemagick",
+                "status": "info",
+                "message": f"Ignoring AI adjustments due to custom config: {adjustments}"
+            })
+    
+    writer({
+        "agent": "imagemagick",
+        "status": "info",
+        "message": f"Using command: {imagemagick_command[:100]}..."  # Show first 100 chars
+    })
     
     # Add lens correction only as fallback if not already applied by lens correction step
     needs_lens_correction = analysis.get("needs_lens_correction", False)
@@ -553,27 +792,28 @@ async def imagemagick_optimization_agent(image_path: str, analysis: Dict[str, An
                 "message": f"Adding fallback lens corrections: {', '.join(lens_issues)}"
             })
     
-    # Add dust removal if needed
-    needs_dust_removal = analysis.get("needs_dust_removal", False)
-    dust_issues = analysis.get("dust_issues", [])
-    
-    if needs_dust_removal and dust_issues:
-        # Add basic dust removal parameters
-        dust_corrections = []
-        if "spots" in dust_issues or "sensor_debris" in dust_issues:
-            # Basic dust spot removal
-            dust_corrections.append("-statistic median 3x3")
-        if "surface_dirt" in dust_issues:
-            # Surface dirt cleanup
-            dust_corrections.append("-morphology close disk:1")
+    # Add dust removal only if dedicated defect repair is enabled
+    if os.getenv("USE_DEFECT_REPAIR"):
+        needs_dust_removal = analysis.get("needs_dust_removal", False)
+        dust_issues = analysis.get("dust_issues", [])
         
-        if dust_corrections:
-            imagemagick_command = f"{imagemagick_command} {' '.join(dust_corrections)}"
-            writer({
-                "agent": "imagemagick",
-                "status": "info",
-                "message": f"Adding dust corrections: {', '.join(dust_issues)}"
-            })
+        if needs_dust_removal and dust_issues:
+            # Add basic dust removal parameters
+            dust_corrections = []
+            if "spots" in dust_issues or "sensor_debris" in dust_issues:
+                # Basic dust spot removal
+                dust_corrections.append("-statistic median 3x3")
+            if "surface_dirt" in dust_issues:
+                # Surface dirt cleanup
+                dust_corrections.append("-morphology close disk:1")
+            
+            if dust_corrections:
+                imagemagick_command = f"{imagemagick_command} {' '.join(dust_corrections)}"
+                writer({
+                    "agent": "imagemagick",
+                    "status": "info",
+                    "message": f"Adding dust corrections: {', '.join(dust_issues)}"
+                })
     
     # Generate output path
     output_path = str(Path(image_path).parent / f"{Path(image_path).stem}-optimized.webp")

@@ -119,7 +119,35 @@ REMOVE_BG_API_KEY=your_removebg_key_here      # Background removal
 MAX_CONCURRENT_IMAGES=3                        # Batch concurrency
 RETRY_ATTEMPTS=2                              # QC retry attempts
 QUALITY_THRESHOLD=0.8                         # Minimum QC score
+
+# ImageMagick base configuration (optional)
+IMAGEMAGICK_BASE_CONFIG="-modulate 100,105,100 -unsharp 0.8x0.6 -quality 95"  # Custom base
 ```
+
+## ImageMagick Base Configuration System
+
+**Purpose**: Provides consistent baseline ImageMagick optimizations inspired by Darktable professional presets
+
+**Default Base Configuration (Darktable-inspired):**
+- Gamma: 1.0 (neutral, matching Darktable)
+- Brightness: 0 (no adjustment)
+- Contrast: 2 (slight boost from RGB levels)
+- Saturation: 108 (moderate boost)
+- Sharpness: 1.0x0.5 unsharp mask (Darktable sharpen)
+- Highlights: -5 (slight recovery)
+- Shadows: +3 (slight lift from RGB levels ~0.613 midpoint)
+- Quality: 95
+
+**How it Works:**
+1. Analysis agent starts with the Darktable-inspired base configuration
+2. Claude suggests adjustments as deltas (e.g., gamma_delta: +0.02)
+3. Deltas are applied to create the final command
+4. Ensures consistency across generations while allowing flexibility
+
+**Customization:**
+- Set `IMAGEMAGICK_BASE_CONFIG` environment variable to override the default base
+- Batch processing can use `BATCH_IMAGEMAGICK_BASE` for consistent batch settings
+- Base values derived from analyzing Darktable XMP sidecar files for professional consistency
 
 ## File I/O Patterns
 
