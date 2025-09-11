@@ -1,4 +1,4 @@
-# 🤖 Agentic Photo Editor
+# 🤖 Doug's Photo Editor
 
 An AI-powered photo editor that transforms your images with intelligent editing using a 5-agent pipeline powered by **Claude Sonnet 4** and **Gemini 2.5 Flash**.
 
