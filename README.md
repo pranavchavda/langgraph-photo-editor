@@ -1,40 +1,37 @@
-# 🤖 Agentic Photo Editor
+# 🤖 Doug's Photo Editor
 
-A desktop application that transforms your photos with AI-powered intelligent editing using a 5-agent pipeline powered by **Claude Sonnet 4** and **Gemini 2.5 Flash**.
+An AI-powered photo editor that transforms your images with intelligent editing using a 5-agent pipeline powered by **Claude Sonnet 4** and **Gemini 2.5 Flash**.
 
 ![Build Status](https://github.com/pranavchavda/langgraph-photo-editor/workflows/Build%20Test/badge.svg)
 
 ## ✨ Features
 
 - **🔍 5-Agent AI Pipeline**: Claude analysis → Gemini editing → ImageMagick → Background removal → Quality control
-- **🖥️ Cross-Platform Desktop**: Native apps for macOS, Windows, and Linux with beautiful UI
-- **🧙‍♂️ Setup Wizard**: First-run guided setup for non-technical users
-- **🎨 Drag & Drop Interface**: Professional file handling with real-time progress tracking
+- **🌐 Web Interface**: Access via Streamlit web app - no installation required
+- **📱 Mobile-Friendly**: Responsive design works on desktop, tablet, and mobile devices
+- **🔑 Browser-Based Storage**: API keys persist in your browser's localStorage
 - **📊 Quality Control**: Automated validation with retry logic and quality scoring
-- **⚡ Batch Processing**: Concurrent processing with configurable limits
+- **⚡ Batch Processing**: Concurrent processing with configurable limits and ZIP download
 - **🎯 Custom Instructions**: Natural language editing commands
 
 ## 🚀 Quick Start
 
-### 📥 Download Installers (Recommended)
+### 🌐 Web Application (Recommended)
 
-**For non-technical users - just download and install:**
+**Access the Streamlit web app - no installation required:**
 
-Visit the [**Releases**](../../releases) page and download the installer for your platform:
+Visit the live application at: `https://[your-app-name].streamlit.app`
 
-- 🍎 **macOS**: `Agentic Photo Editor-x.x.x.dmg` (drag to Applications)
-- 🪟 **Windows**: `Agentic Photo Editor Setup x.x.x.exe` (run installer)  
-- 🐧 **Linux**: `Agentic Photo Editor-x.x.x.AppImage` (make executable and run)
+**Features:**
+- 🎨 Single image and batch processing modes
+- 🔑 API keys stored securely in your browser
+- 📱 Works on desktop, tablet, and mobile devices
+- 📦 Batch processing with ZIP download
+- 🚀 Zero installation required
 
-**What you get:**
-- 🎨 Professional drag-and-drop interface
-- 🧙‍♂️ First-run setup wizard for API keys
-- 📊 Real-time progress tracking
-- 🚀 Zero technical setup required
+### 🛠️ Run Locally
 
-### 🛠️ Build from Source
-
-**For developers:**
+**For local development:**
 
 ```bash
 git clone https://github.com/pranavchavda/langgraph-photo-editor.git
@@ -45,11 +42,8 @@ python -m venv venv
 source venv/bin/activate  # Linux/macOS
 pip install -r requirements.txt
 
-# Setup Electron desktop app
-cd electron
-npm install
-npm run dev  # Development mode
-npm run dist:all  # Build installers
+# Run Streamlit web app
+streamlit run streamlit_app.py
 ```
 
 ### 💻 Command Line Interface
@@ -98,40 +92,27 @@ The app needs these API keys (configured through the setup wizard):
 
 ### First-Time Setup
 
-1. **Launch the app** - Setup wizard appears automatically
-2. **Enter API keys** - Real-time validation with help links
-3. **Configure settings** - Quality threshold, retry attempts, etc.
-4. **Start processing** - Drag & drop images to begin!
+1. **Visit the web app** - Open the Streamlit application in your browser
+2. **Enter API keys** - Keys are stored securely in your browser's localStorage
+3. **Select processing mode** - Choose single image or batch processing
+4. **Upload and process** - Upload images and start processing!
 
 ## 🏗️ Architecture
 
-- **Frontend**: React + TypeScript + Tailwind CSS with Electron
+- **Frontend**: Streamlit web interface with responsive design
 - **Backend**: Python with LangGraph workflow orchestration  
 - **AI Services**: Claude Sonnet 4, Gemini 2.5 Flash, Remove.bg
-- **Build System**: Webpack + electron-builder for cross-platform distribution
-- **Deployment**: GitHub Actions automated builds for all platforms
+- **Deployment**: Streamlit Cloud for web hosting
+- **Storage**: Browser localStorage for API key persistence
 
-## 🚀 Automated Builds
+## 🚀 Deployment
 
-This repository uses GitHub Actions to automatically build installers for all platforms:
+This repository uses GitHub Actions for continuous integration and deployment:
 
-- **🏷️ Tagged Releases**: Create a git tag like `v1.0.0` to trigger release builds
-- **🔄 Pull Requests**: Automatically test builds on all platforms  
+- **🔄 Pull Requests**: Automatically test builds and code quality
+- **🌐 Streamlit Cloud**: Deploy web app to Streamlit Cloud hosting
 - **📦 Artifacts**: Download build artifacts from GitHub Actions runs
 - **🎯 Manual Triggers**: Use "Actions" tab to manually trigger builds
-
-### Creating a Release
-
-```bash
-# Tag a new version
-git tag v1.0.0
-git push origin v1.0.0
-
-# GitHub Actions will automatically:
-# 1. Build installers for macOS, Windows, Linux
-# 2. Create a new GitHub release
-# 3. Upload all installers as release assets
-```
 
 ## 🎨 Input/Output
 
@@ -147,22 +128,21 @@ git push origin v1.0.0
 ## 📊 Performance
 
 - **Processing Time**: ~30-90 seconds per image (depending on complexity)
-- **Batch Processing**: 3 concurrent images (configurable)
+- **Batch Processing**: 1-5 concurrent images (configurable in web app)
 - **Quality Pass Rate**: 85%+ pass on first attempt, 95%+ after retries
-- **File Size**: ~108MB installed app
+- **Web App Size**: Minimal footprint - runs entirely in browser
 
 ## 🔮 Future Enhancements
 
-- **🌐 Web Interface**: FastAPI backend with React frontend
 - **🎨 Style Presets**: Custom presets for different product categories  
 - **🛒 E-commerce Integration**: Direct integration with Shopify, etc.
 - **📈 Analytics Dashboard**: Processing metrics and quality reporting
+- **🤖 Advanced AI Models**: Integration with latest vision and editing models
 
 ## 📚 Documentation
 
-- **[🎯 User Guide](electron/USER_GUIDE.md)**: Complete end-user documentation with installation guides
-- **[🔧 Build Guide](electron/BUILD_GUIDE.md)**: Technical documentation for developers and building  
 - **[💻 Development Guide](CLAUDE.md)**: Project setup and development workflow
+- **[📖 Streamlit Documentation](https://docs.streamlit.io/)**: Official Streamlit documentation
 
 ## 🤝 Contributing
 
