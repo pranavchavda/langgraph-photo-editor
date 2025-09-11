@@ -1,24 +1,38 @@
 # 🤖 Agentic Photo Editor
 
-A desktop application that transforms your photos with AI-powered intelligent editing using a 5-agent pipeline powered by **Claude Sonnet 4** and **Gemini 2.5 Flash**.
+An AI-powered photo editor that transforms your photos with intelligent editing using a 5-agent pipeline powered by **Claude Sonnet 4** and **Gemini 2.5 Flash**. Available as both a **web application** and desktop app.
 
 ![Build Status](https://github.com/pranavchavda/langgraph-photo-editor/workflows/Build%20Test/badge.svg)
 
 ## ✨ Features
 
 - **🔍 5-Agent AI Pipeline**: Claude analysis → Gemini editing → ImageMagick → Background removal → Quality control
-- **🖥️ Cross-Platform Desktop**: Native apps for macOS, Windows, and Linux with beautiful UI
-- **🧙‍♂️ Setup Wizard**: First-run guided setup for non-technical users
-- **🎨 Drag & Drop Interface**: Professional file handling with real-time progress tracking
+- **🌐 Web Application**: Browser-based interface with no installation required
+- **🖥️ Cross-Platform Desktop**: Alternative native apps for macOS, Windows, and Linux
+- **🔑 API Key Persistence**: Secure browser storage for seamless sessions
 - **📊 Quality Control**: Automated validation with retry logic and quality scoring
-- **⚡ Batch Processing**: Concurrent processing with configurable limits
+- **⚡ Batch Processing**: Concurrent processing with ZIP download for results
 - **🎯 Custom Instructions**: Natural language editing commands
+- **📱 Mobile-Friendly**: Responsive design works on tablets and mobile devices
 
 ## 🚀 Quick Start
 
-### 📥 Download Installers (Recommended)
+### 🌐 Web Application (Recommended)
 
-**For non-technical users - just download and install:**
+**Try it instantly in your browser:**
+
+**🔗 [Launch Web App](https://your-app-name.streamlit.app)** - No installation required!
+
+**Features:**
+- 🚀 **Instant access** - Works in any modern browser
+- 🔑 **API key persistence** - Keys saved securely in browser storage
+- 📱 **Mobile-friendly** - Responsive design for all devices
+- 📦 **Batch processing** - Upload multiple images, download as ZIP
+- 🌍 **Cross-platform** - Windows, macOS, Linux, mobile
+
+### 🖥️ Desktop Application (Alternative)
+
+**For users who prefer native apps:**
 
 Visit the [**Releases**](../../releases) page and download the installer for your platform:
 
@@ -26,13 +40,7 @@ Visit the [**Releases**](../../releases) page and download the installer for you
 - 🪟 **Windows**: `Agentic Photo Editor Setup x.x.x.exe` (run installer)  
 - 🐧 **Linux**: `Agentic Photo Editor-x.x.x.AppImage` (make executable and run)
 
-**What you get:**
-- 🎨 Professional drag-and-drop interface
-- 🧙‍♂️ First-run setup wizard for API keys
-- 📊 Real-time progress tracking
-- 🚀 Zero technical setup required
-
-### 🛠️ Build from Source
+### 🛠️ Run Locally
 
 **For developers:**
 
@@ -43,9 +51,13 @@ cd langgraph-photo-editor
 # Setup Python environment
 python -m venv venv
 source venv/bin/activate  # Linux/macOS
+# or venv\Scripts\activate  # Windows
 pip install -r requirements.txt
 
-# Setup Electron desktop app
+# Run web application locally
+streamlit run streamlit_app.py
+
+# OR build desktop app
 cd electron
 npm install
 npm run dev  # Development mode
@@ -90,7 +102,7 @@ python photo_editor.py batch ./product-photos/
 
 ### API Keys Required
 
-The app needs these API keys (configured through the setup wizard):
+The app needs these API keys:
 
 - **🧠 Claude (Anthropic)**: Get from [console.anthropic.com](https://console.anthropic.com/)
 - **✨ Gemini**: Get from [makersuite.google.com](https://makersuite.google.com/app/apikey)  
@@ -98,6 +110,13 @@ The app needs these API keys (configured through the setup wizard):
 
 ### First-Time Setup
 
+**Web App:**
+1. **Open the web app** - [Launch here](https://your-app-name.streamlit.app)
+2. **Enter API keys** - Stored securely in your browser
+3. **Upload images** - Single image or batch mode
+4. **Download results** - Individual files or ZIP for batches
+
+**Desktop App:**
 1. **Launch the app** - Setup wizard appears automatically
 2. **Enter API keys** - Real-time validation with help links
 3. **Configure settings** - Quality threshold, retry attempts, etc.
@@ -105,11 +124,20 @@ The app needs these API keys (configured through the setup wizard):
 
 ## 🏗️ Architecture
 
-- **Frontend**: React + TypeScript + Tailwind CSS with Electron
-- **Backend**: Python with LangGraph workflow orchestration  
-- **AI Services**: Claude Sonnet 4, Gemini 2.5 Flash, Remove.bg
-- **Build System**: Webpack + electron-builder for cross-platform distribution
-- **Deployment**: GitHub Actions automated builds for all platforms
+### Multi-Agent LangGraph Workflow
+- **Enhanced Analysis Agent** (Claude Sonnet 4) - Determines optimal processing strategy
+- **Gemini Edit Agent** (Gemini 2.5 Flash) - Performs AI image editing with natural language
+- **Background Agent** (remove.bg API) - Professional background removal  
+- **ImageMagick Agent** - Parameter-based optimizations as fallback
+- **QC Agent** (Claude) - Quality validation and retry logic
+
+### Technology Stack
+- **Web Frontend**: Streamlit with responsive design
+- **Desktop Frontend**: React + TypeScript + Tailwind CSS with Electron
+- **Backend**: Python with LangGraph workflow orchestration using `@task` decorators
+- **AI Services**: Claude Sonnet 4, Gemini 2.5 Flash, Remove.bg API
+- **Image Processing**: ImageMagick with Darktable-inspired presets
+- **Deployment**: Streamlit Cloud for web, GitHub Actions for desktop builds
 
 ## 🚀 Automated Builds
 
@@ -153,10 +181,11 @@ git push origin v1.0.0
 
 ## 🔮 Future Enhancements
 
-- **🌐 Web Interface**: FastAPI backend with React frontend
 - **🎨 Style Presets**: Custom presets for different product categories  
 - **🛒 E-commerce Integration**: Direct integration with Shopify, etc.
 - **📈 Analytics Dashboard**: Processing metrics and quality reporting
+- **🔧 Advanced Lens Correction**: Support for more camera/lens combinations
+- **🤖 GPT-5 Improvements**: Dust & scratch repair, Darktable styles, libvips export
 
 ## 📚 Documentation
 
