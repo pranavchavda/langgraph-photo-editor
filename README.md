@@ -117,7 +117,7 @@ This repository uses GitHub Actions for continuous integration and deployment:
 ## 🎨 Input/Output
 
 **Supported Formats:**
-- 📥 **Input**: JPG, JPEG, PNG, WebP
+- 📥 **Input**: JPG, JPEG, PNG, WebP, AVIF
 - 📤 **Output**: WebP (preserves transparency from background removal)
 
 **File Naming:**

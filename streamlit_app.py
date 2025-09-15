@@ -221,6 +221,233 @@ with st.sidebar:
                             help="Automatically detect and remove dust spots, sensor debris, and scratches from images.")
     remove_background = st.checkbox("Remove Background", value=True)
     
+    # ImageMagick Base Configuration Section
+    st.subheader("🎛️ ImageMagick Base Settings")
+    
+    # Initialize ImageMagick settings in session state if not present
+    if 'imagemagick_settings' not in st.session_state:
+        # Try to load from localStorage first
+        stored_settings = localS.getItem('imagemagick_settings')
+        if stored_settings:
+            try:
+                import json
+                loaded_settings = json.loads(stored_settings)
+                # Ensure all required keys exist with defaults
+                default_settings = {
+                    'gamma': 1.0,
+                    'brightness': 0,
+                    'contrast': 2,
+                    'saturation': 108,
+                    'sharpness': "1.0x0.5",
+                    'highlights': -5,
+                    'shadows': 3,
+                    'quality': 95,
+                    'vibrance': 0,
+                    'preset': 'Default'
+                }
+                # Merge loaded settings with defaults (loaded settings take precedence)
+                for key, default_value in default_settings.items():
+                    if key not in loaded_settings:
+                        loaded_settings[key] = default_value
+                st.session_state.imagemagick_settings = loaded_settings
+            except:
+                # Use defaults if loading fails
+                st.session_state.imagemagick_settings = {
+                    'gamma': 1.0,
+                    'brightness': 0,
+                    'contrast': 2,
+                    'saturation': 108,
+                    'sharpness': "1.0x0.5",
+                    'highlights': -5,
+                    'shadows': 3,
+                    'quality': 95,
+                    'vibrance': 0,
+                    'preset': 'Default'
+                }
+        else:
+            st.session_state.imagemagick_settings = {
+                'gamma': 1.0,
+                'brightness': 0,
+                'contrast': 2,
+                'saturation': 108,
+                'sharpness': "1.0x0.5",
+                'highlights': -5,
+                'shadows': 3,
+                'quality': 95,
+                'vibrance': 0,
+                'preset': 'Default'
+            }
+    
+    # Preset configurations
+    presets = {
+        'Default': {'gamma': 1.0, 'brightness': 0, 'contrast': 2, 'saturation': 108, 'highlights': -5, 'shadows': 3},
+        'Natural Product': {'gamma': 1.02, 'brightness': 0, 'contrast': 1, 'saturation': 105, 'highlights': -3, 'shadows': 2},
+        'Vibrant E-commerce': {'gamma': 1.05, 'brightness': 2, 'contrast': 3, 'saturation': 115, 'highlights': -8, 'shadows': 5},
+        'Chrome/Metal': {'gamma': 0.95, 'brightness': -2, 'contrast': 4, 'saturation': 102, 'highlights': -12, 'shadows': 3},
+        'Soft/Matte': {'gamma': 1.0, 'brightness': 1, 'contrast': 0, 'saturation': 106, 'highlights': -2, 'shadows': 4},
+        'High-key White': {'gamma': 1.08, 'brightness': 3, 'contrast': -1, 'saturation': 103, 'highlights': 0, 'shadows': 8},
+        'Custom': None  # Indicates custom settings
+    }
+    
+    # Preset selector
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        selected_preset = st.selectbox(
+            "Preset Configuration",
+            list(presets.keys()),
+            index=list(presets.keys()).index(st.session_state.imagemagick_settings.get('preset', 'Default')),
+            help="Choose a preset or select Custom to adjust manually"
+        )
+    
+    with col2:
+        if st.button("🔄 Reset to Default"):
+            st.session_state.imagemagick_settings = presets['Default'].copy()
+            st.session_state.imagemagick_settings['preset'] = 'Default'
+            st.rerun()
+    
+    # Apply preset if changed
+    if selected_preset != st.session_state.imagemagick_settings.get('preset', 'Default'):
+        if selected_preset != 'Custom' and presets[selected_preset]:
+            st.session_state.imagemagick_settings.update(presets[selected_preset])
+            st.session_state.imagemagick_settings['preset'] = selected_preset
+            # Save to localStorage
+            import json
+            localS.setItem('imagemagick_settings', json.dumps(st.session_state.imagemagick_settings))
+            st.rerun()
+    
+    # Show/hide advanced settings
+    show_advanced = st.checkbox("🎚️ Show Advanced Settings", value=(selected_preset == 'Custom'))
+    
+    if show_advanced:
+        st.markdown("#### Fine-tune Parameters")
+        
+        # Create three columns for parameters
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.session_state.imagemagick_settings['gamma'] = st.slider(
+                "Gamma",
+                min_value=0.5, max_value=2.0, value=st.session_state.imagemagick_settings['gamma'],
+                step=0.01, help="Overall brightness curve (1.0 = neutral)"
+            )
+            
+            st.session_state.imagemagick_settings['brightness'] = st.slider(
+                "Brightness",
+                min_value=-20, max_value=20, value=st.session_state.imagemagick_settings['brightness'],
+                step=1, help="Linear brightness adjustment"
+            )
+            
+            st.session_state.imagemagick_settings['contrast'] = st.slider(
+                "Contrast",
+                min_value=-20, max_value=20, value=st.session_state.imagemagick_settings['contrast'],
+                step=1, help="Contrast adjustment"
+            )
+        
+        with col2:
+            st.session_state.imagemagick_settings['saturation'] = st.slider(
+                "Saturation",
+                min_value=50, max_value=200, value=st.session_state.imagemagick_settings['saturation'],
+                step=1, help="Color saturation (100 = neutral)"
+            )
+            
+            st.session_state.imagemagick_settings['vibrance'] = st.slider(
+                "Vibrance",
+                min_value=-100, max_value=100, value=st.session_state.imagemagick_settings['vibrance'],
+                step=5, help="Selective saturation for less saturated colors"
+            )
+            
+            st.session_state.imagemagick_settings['quality'] = st.slider(
+                "Output Quality",
+                min_value=70, max_value=100, value=st.session_state.imagemagick_settings.get('quality', 95),
+                step=5, help="JPEG/WebP compression quality"
+            )
+        
+        with col3:
+            st.session_state.imagemagick_settings['highlights'] = st.slider(
+                "Highlights",
+                min_value=-30, max_value=5, value=st.session_state.imagemagick_settings['highlights'],
+                step=1, help="Highlight recovery (negative = darken)"
+            )
+            
+            st.session_state.imagemagick_settings['shadows'] = st.slider(
+                "Shadows",
+                min_value=-5, max_value=20, value=st.session_state.imagemagick_settings['shadows'],
+                step=1, help="Shadow lifting (positive = brighten)"
+            )
+            
+            # Sharpness as text input (it's a string like "1.0x0.5")
+            sharpness_input = st.text_input(
+                "Sharpness (RxS)",
+                value=st.session_state.imagemagick_settings.get('sharpness', '1.0x0.5'),
+                help="Unsharp mask parameters (e.g., 1.0x0.5)"
+            )
+            if sharpness_input:
+                st.session_state.imagemagick_settings['sharpness'] = sharpness_input
+        
+        # Mark as custom if user changed any value
+        st.session_state.imagemagick_settings['preset'] = 'Custom'
+        
+        # Save to localStorage whenever settings change
+        import json
+        localS.setItem('imagemagick_settings', json.dumps(st.session_state.imagemagick_settings))
+        
+        # Show the resulting ImageMagick command
+        with st.expander("🔧 View Generated ImageMagick Command"):
+            # Build the command string
+            cmd_parts = []
+            
+            gamma = st.session_state.imagemagick_settings['gamma']
+            if gamma != 1.0:
+                cmd_parts.append(f"-gamma {gamma}")
+            
+            brightness = st.session_state.imagemagick_settings['brightness']
+            contrast = st.session_state.imagemagick_settings['contrast']
+            if brightness != 0 or contrast != 0:
+                cmd_parts.append(f"-brightness-contrast {brightness}x{contrast}")
+            
+            highlights = st.session_state.imagemagick_settings['highlights']
+            shadows = st.session_state.imagemagick_settings['shadows']
+            if highlights != 0 or shadows != 0:
+                black_point = max(0, shadows)
+                white_point = min(100, 100 + highlights)
+                if black_point != 0 or white_point != 100:
+                    cmd_parts.append(f"-level {black_point}%,{white_point}%")
+            
+            saturation = st.session_state.imagemagick_settings['saturation']
+            if saturation != 100:
+                cmd_parts.append(f"-modulate 100,{saturation},100")
+            
+            vibrance = st.session_state.imagemagick_settings['vibrance']
+            if vibrance != 0:
+                if vibrance > 0:
+                    cmd_parts.append(f"-colorspace HSL -channel G -sigmoidal-contrast {vibrance/10},50% +channel -colorspace sRGB")
+                else:
+                    cmd_parts.append(f"-colorspace HSL -channel G +sigmoidal-contrast {abs(vibrance)/10},50% +channel -colorspace sRGB")
+            
+            sharpness = st.session_state.imagemagick_settings.get('sharpness', '1.0x0.5')
+            if sharpness:
+                cmd_parts.append(f"-unsharp {sharpness}")
+            
+            quality = st.session_state.imagemagick_settings.get('quality', 95)
+            cmd_parts.append(f"-quality {quality}")
+            
+            command = " ".join(cmd_parts) if cmd_parts else "(no adjustments)"
+            st.code(command, language="bash")
+            st.caption("💡 This is the base command. Claude will add additional adjustments based on image analysis.")
+    
+    # Apply ImageMagick settings to environment with defaults for missing keys
+    import os
+    settings = st.session_state.imagemagick_settings
+    os.environ['IMAGEMAGICK_GAMMA'] = str(settings.get('gamma', 1.0))
+    os.environ['IMAGEMAGICK_BRIGHTNESS'] = str(settings.get('brightness', 0))
+    os.environ['IMAGEMAGICK_CONTRAST'] = str(settings.get('contrast', 2))
+    os.environ['IMAGEMAGICK_SATURATION'] = str(settings.get('saturation', 108))
+    os.environ['IMAGEMAGICK_VIBRANCE'] = str(settings.get('vibrance', 0))
+    os.environ['IMAGEMAGICK_HIGHLIGHTS'] = str(settings.get('highlights', -5))
+    os.environ['IMAGEMAGICK_SHADOWS'] = str(settings.get('shadows', 3))
+    os.environ['IMAGEMAGICK_SHARPNESS'] = settings.get('sharpness', '1.0x0.5')
+    os.environ['IMAGEMAGICK_QUALITY'] = str(settings.get('quality', 95))
+    
     st.subheader("📷 Lens Corrections")
     
     # Add checkbox to enable/disable lens corrections
@@ -439,7 +666,7 @@ if mode == "🖼️ Single Image":
         st.subheader("📷 Input")
         uploaded_file = st.file_uploader(
             "Choose an image to enhance...",
-            type=['png', 'jpg', 'jpeg', 'webp'],
+            type=['png', 'jpg', 'jpeg', 'webp', 'avif'],
             key="single_upload"
         )
         
@@ -558,9 +785,26 @@ if mode == "🖼️ Single Image":
                 with st.spinner("🔄 Processing your image..."):
                     try:
                         with tempfile.TemporaryDirectory() as temp_dir:
-                            input_path = Path(temp_dir) / uploaded_file.name
-                            with open(input_path, "wb") as f:
-                                f.write(uploaded_file.getbuffer())
+                            # Handle AVIF conversion if needed
+                            if Path(uploaded_file.name).suffix.lower() == '.avif':
+                                # Convert AVIF to WebP
+                                from PIL import Image as PILImage
+                                import io
+                                
+                                img = PILImage.open(uploaded_file)
+                                webp_buffer = io.BytesIO()
+                                img.save(webp_buffer, 'WEBP', quality=95, method=6)
+                                webp_buffer.seek(0)
+                                
+                                # Save as WebP
+                                input_path = Path(temp_dir) / f"{Path(uploaded_file.name).stem}.webp"
+                                with open(input_path, "wb") as f:
+                                    f.write(webp_buffer.getvalue())
+                                st.info("🔄 Converted AVIF to WebP for processing")
+                            else:
+                                input_path = Path(temp_dir) / uploaded_file.name
+                                with open(input_path, "wb") as f:
+                                    f.write(uploaded_file.getbuffer())
                             
                             # Apply lens corrections first if enabled and applicable
                             if apply_lens_correction:
@@ -770,7 +1014,7 @@ elif mode == "📦 Batch Processing":
     
     uploaded_files = st.file_uploader(
         "Choose images to process...",
-        type=['png', 'jpg', 'jpeg', 'webp'],
+        type=['png', 'jpg', 'jpeg', 'webp', 'avif'],
         accept_multiple_files=True,
         key="batch_upload"
     )
@@ -1010,9 +1254,25 @@ elif mode == "📦 Batch Processing":
                     
                     async def process_image_async(file, idx, total):
                         try:
-                            input_path = Path(temp_dir) / f"input_{idx}_{file.name}"
-                            with open(input_path, "wb") as f:
-                                f.write(file.getbuffer())
+                            # Handle AVIF conversion if needed
+                            if Path(file.name).suffix.lower() == '.avif':
+                                # Convert AVIF to WebP
+                                from PIL import Image as PILImage
+                                import io
+                                
+                                img = PILImage.open(file)
+                                webp_buffer = io.BytesIO()
+                                img.save(webp_buffer, 'WEBP', quality=95, method=6)
+                                webp_buffer.seek(0)
+                                
+                                # Save as WebP
+                                input_path = Path(temp_dir) / f"input_{idx}_{Path(file.name).stem}.webp"
+                                with open(input_path, "wb") as f:
+                                    f.write(webp_buffer.getvalue())
+                            else:
+                                input_path = Path(temp_dir) / f"input_{idx}_{file.name}"
+                                with open(input_path, "wb") as f:
+                                    f.write(file.getbuffer())
                             
                             status_text.text(f"Processing {file.name} ({idx + 1}/{total})...")
                             
@@ -1158,9 +1418,25 @@ elif mode == "📦 Batch Processing":
                             # Save all files to temp directory first
                             image_paths = []
                             for idx, file in enumerate(uploaded_files):
-                                input_path = Path(temp_dir) / f"input_{idx}_{file.name}"
-                                with open(input_path, "wb") as f:
-                                    f.write(file.getbuffer())
+                                # Handle AVIF conversion if needed
+                                if Path(file.name).suffix.lower() == '.avif':
+                                    # Convert AVIF to WebP
+                                    from PIL import Image as PILImage
+                                    import io
+                                    
+                                    img = PILImage.open(file)
+                                    webp_buffer = io.BytesIO()
+                                    img.save(webp_buffer, 'WEBP', quality=95, method=6)
+                                    webp_buffer.seek(0)
+                                    
+                                    # Save as WebP
+                                    input_path = Path(temp_dir) / f"input_{idx}_{Path(file.name).stem}.webp"
+                                    with open(input_path, "wb") as f:
+                                        f.write(webp_buffer.getvalue())
+                                else:
+                                    input_path = Path(temp_dir) / f"input_{idx}_{file.name}"
+                                    with open(input_path, "wb") as f:
+                                        f.write(file.getbuffer())
                                 image_paths.append(str(input_path))
                             
                             # Apply lens corrections if needed

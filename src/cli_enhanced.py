@@ -485,7 +485,7 @@ async def process(ctx, image_path, output_dir, instructions, json_output):
 @click.option('--output-dir', type=click.Path(), help='Output directory')
 @click.option('--max-concurrent', default=3, help='Maximum concurrent processing')
 @click.option('--instructions', help='Custom processing instructions')
-@click.option('--pattern', default='*.{jpg,jpeg,png,webp}', help='File pattern to match')
+@click.option('--pattern', default='*.{jpg,jpeg,png,webp,avif}', help='File pattern to match')
 @click.option('--no-consistency', is_flag=True, help='Disable batch consistency mode')
 @click.pass_context
 async def batch(ctx, input_dir, output_dir, max_concurrent, instructions, pattern, no_consistency):
@@ -703,7 +703,7 @@ async def execute_enhanced_chat_instruction(instruction: Dict[str, Any], use_enh
         elif mode_type == "batch" and target_path.is_dir():
             # Process directory with enhanced workflow
             image_files = []
-            for ext in ['jpg', 'jpeg', 'png', 'webp']:
+            for ext in ['jpg', 'jpeg', 'png', 'webp', 'avif']:
                 image_files.extend(list(target_path.glob(f"*.{ext}")))
                 image_files.extend(list(target_path.glob(f"*.{ext.upper()}")))
             

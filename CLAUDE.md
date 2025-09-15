@@ -120,8 +120,30 @@ MAX_CONCURRENT_IMAGES=3                        # Batch concurrency
 RETRY_ATTEMPTS=2                              # QC retry attempts
 QUALITY_THRESHOLD=0.8                         # Minimum QC score
 
-# ImageMagick base configuration (optional)
+# ImageMagick base configuration (optional) - Two approaches:
+# 1. Simple: Full command override
 IMAGEMAGICK_BASE_CONFIG="-modulate 100,105,100 -unsharp 0.8x0.6 -quality 95"  # Custom base
+
+# 2. Granular: Individual parameter control
+IMAGEMAGICK_GAMMA=1.0                         # Gamma correction (0.8-1.2)
+IMAGEMAGICK_BRIGHTNESS=0                      # Brightness (-10 to +10)
+IMAGEMAGICK_CONTRAST=2                        # Contrast (-10 to +10)
+IMAGEMAGICK_SATURATION=108                    # Saturation (90-120)
+IMAGEMAGICK_VIBRANCE=0                        # Vibrance (-100 to +100)
+IMAGEMAGICK_HUE_SHIFT=0                       # Hue rotation (-180 to +180)
+IMAGEMAGICK_SHARPNESS="1.0x0.5"               # Unsharp mask parameters
+IMAGEMAGICK_HIGHLIGHTS=-5                     # Highlight recovery (-20 to 0)
+IMAGEMAGICK_SHADOWS=3                         # Shadow lifting (0 to 20)
+IMAGEMAGICK_DENOISE=0                         # Noise reduction (0-100)
+IMAGEMAGICK_BLUR=0                            # Gaussian blur (0-10)
+IMAGEMAGICK_TRIM=false                        # Auto-trim whitespace
+IMAGEMAGICK_TRIM_FUZZ=5                       # Trim tolerance (%)
+IMAGEMAGICK_AUTO_LEVEL=false                  # Auto-level (careful!)
+IMAGEMAGICK_AUTO_GAMMA=false                  # Auto-gamma
+IMAGEMAGICK_NORMALIZE=false                   # Normalize (often overexposes)
+IMAGEMAGICK_RESIZE=""                         # Resize (e.g., "1920x1080")
+IMAGEMAGICK_COLORSPACE=""                     # Colorspace (e.g., "sRGB")
+IMAGEMAGICK_QUALITY=95                        # Output quality (1-100)
 ```
 
 ## ImageMagick Base Configuration System
@@ -144,14 +166,44 @@ IMAGEMAGICK_BASE_CONFIG="-modulate 100,105,100 -unsharp 0.8x0.6 -quality 95"  # 
 3. Deltas are applied to create the final command
 4. Ensures consistency across generations while allowing flexibility
 
-**Customization:**
-- Set `IMAGEMAGICK_BASE_CONFIG` environment variable to override the default base
-- Batch processing can use `BATCH_IMAGEMAGICK_BASE` for consistent batch settings
-- Base values derived from analyzing Darktable XMP sidecar files for professional consistency
+**Customization Options:**
+
+1. **Simple Override**: Set `IMAGEMAGICK_BASE_CONFIG` for a complete command
+   ```bash
+   export IMAGEMAGICK_BASE_CONFIG="-gamma 1.1 -modulate 105,110,100 -quality 95"
+   ```
+
+2. **Granular Control**: Set individual parameters
+   ```bash
+   export IMAGEMAGICK_GAMMA=1.05
+   export IMAGEMAGICK_SATURATION=115
+   export IMAGEMAGICK_TRIM=true
+   ```
+
+3. **Use Presets**: Source the config examples
+   ```bash
+   source imagemagick_config_examples.sh && chrome_metal
+   python photo_editor.py process image.jpg
+   ```
+
+**Available Presets:**
+- `natural_product` - Subtle enhancement for natural look
+- `vibrant_ecommerce` - Punchy colors for e-commerce
+- `chrome_metal` - Optimized for reflective surfaces
+- `soft_matte` - Gentle processing for matte products
+- `high_key` - Bright, white background optimization
+
+**Advanced Features:**
+- **Vibrance**: Affects less saturated colors more than saturation
+- **Color Balance**: Per-channel RGB adjustments
+- **CLAHE**: Contrast Limited Adaptive Histogram Equalization
+- **Trim with Fuzz**: Intelligent whitespace removal
+- **Colorspace Conversion**: Work in different color spaces
+- **Per-Channel Operations**: Apply different effects to R/G/B channels
 
 ## File I/O Patterns
 
-**Input Formats:** JPG, JPEG, PNG, WebP
+**Input Formats:** JPG, JPEG, PNG, WebP, AVIF
 **Output Format:** Always WebP (preserves transparency from background removal)
 
 **Directory Structure:**

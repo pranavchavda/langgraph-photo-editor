@@ -205,7 +205,7 @@ def process(image_path: str, output_dir: str):
         sys.exit(1)
     
     # Check if it's an image
-    if image_path.suffix.lower() not in ['.jpg', '.jpeg', '.png', '.webp']:
+    if image_path.suffix.lower() not in ['.jpg', '.jpeg', '.png', '.webp', '.avif']:
         console.print(f"❌ Not a supported image format: {image_path.suffix}", style="red")
         sys.exit(1)
     
@@ -224,7 +224,7 @@ def process(image_path: str, output_dir: str):
 @click.argument("input_dir", type=click.Path(exists=True))
 @click.option("--output-dir", type=click.Path(), help="Output directory")
 @click.option("--max-concurrent", default=3, help="Max concurrent image processing")
-@click.option("--pattern", default="*.{jpg,jpeg,png,webp}", help="File pattern to match")
+@click.option("--pattern", default="*.{jpg,jpeg,png,webp,avif}", help="File pattern to match")
 def batch(input_dir: str, output_dir: str, max_concurrent: int, pattern: str):
     """Process all images in a directory with the agentic workflow"""
     
@@ -232,7 +232,7 @@ def batch(input_dir: str, output_dir: str, max_concurrent: int, pattern: str):
     
     # Find all matching images
     image_files = []
-    for ext in ['jpg', 'jpeg', 'png', 'webp']:
+    for ext in ['jpg', 'jpeg', 'png', 'webp', 'avif']:
         image_files.extend(list(input_path.glob(f"*.{ext}")))
         image_files.extend(list(input_path.glob(f"*.{ext.upper()}")))
     
@@ -438,7 +438,7 @@ async def execute_chat_instruction(instruction: Dict[str, Any]):
         elif mode == "batch" and target_path.is_dir():
             # Process directory
             image_files = []
-            for ext in ['jpg', 'jpeg', 'png', 'webp']:
+            for ext in ['jpg', 'jpeg', 'png', 'webp', 'avif']:
                 image_files.extend(list(target_path.glob(f"*.{ext}")))
                 image_files.extend(list(target_path.glob(f"*.{ext.upper()}")))
             

@@ -1,0 +1,42 @@
+        # Extract image from response - Gemini 2.5 Flash Image returns inline_data
+        image_saved = False
+        
+        if hasattr(response, 'candidates') and response.candidates:
+            for candidate in response.candidates:
+                if not hasattr(candidate, 'content') or not candidate.content:
+                    continue
+                    
+                if not hasattr(candidate.content, 'parts') or not candidate.content.parts:
+                    continue
+                    
+                for part in candidate.content.parts:
+                    # Skip parts without inline_data
+                    if not hasattr(part, 'inline_data') or not part.inline_data:
+                        continue
+                    
+                    print(f"✅ Found edited image data ({part.inline_data.mime_type}, {len(part.inline_data.data)} bytes)")
+                    
+                    try:
+                        # Extract the raw image bytes
+                        image_data = part.inline_data.data
+                        
+                        # Load and process the image
+                        from PIL import Image
+                        import io
+                        edited_img = Image.open(io.BytesIO(image_data))
+                        
+                        # Save the image
+                        edited_img.save(output_path, 'WEBP', quality=95)
+                        
+                        # Verify save
+                        if os.path.getsize(output_path) > 0:
+                            print(f"✅ Saved: {Path(output_path).name}")
+                            image_saved = True
+                            break
+                    except Exception as e:
+                        print(f"❌ Error: {e}")
+                        continue
+                
+                if image_saved:
+                    break
+        
