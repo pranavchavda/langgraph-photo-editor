@@ -8,8 +8,15 @@ import os
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 from PIL import Image
-from PIL.ExifTags import TAGS, IFD
+from PIL.ExifTags import TAGS
 import numpy as np
+
+# Try to import IFD which is available in Pillow 8.3.0+
+try:
+    from PIL.ExifTags import IFD
+    HAS_IFD = True
+except ImportError:
+    HAS_IFD = False
 
 # Try to import lensfunpy
 LENSFUNPY_AVAILABLE = False
@@ -34,11 +41,16 @@ def get_image_exif_data(image_path: str) -> Dict:
             tag = TAGS.get(tag_id, tag_id)
             exif_dict[tag] = value
         
-        # Also check IFD EXIF data for more detailed info
-        ifd_exif = exifdata.get_ifd(IFD.Exif) if hasattr(exifdata, 'get_ifd') else {}
-        for tag_id, value in ifd_exif.items():
-            tag = TAGS.get(tag_id, tag_id)
-            exif_dict[tag] = value
+        # Also check IFD EXIF data for more detailed info (if available)
+        if HAS_IFD and hasattr(exifdata, 'get_ifd'):
+            try:
+                ifd_exif = exifdata.get_ifd(IFD.Exif)
+                for tag_id, value in ifd_exif.items():
+                    tag = TAGS.get(tag_id, tag_id)
+                    exif_dict[tag] = value
+            except:
+                # Fall back to basic EXIF data
+                pass
         
         # Try to get lens model from various possible EXIF tags
         lens_model = None
