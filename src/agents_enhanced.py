@@ -1202,10 +1202,10 @@ async def imagemagick_optimization_agent(image_path: str, analysis: Dict[str, An
 
 async def background_removal_agent(image_path: str, analysis: Dict[str, Any]) -> str:
     """
-    🖼️ Background Removal Agent - Uses remove.bg API
+    🖼️ Background Removal Agent - Uses remove.bg API or rembg (ML-based)
     """
     writer = get_stream_writer()
-    
+
     if not analysis.get("remove_background", False):
         writer({
             "agent": "background",
@@ -1213,15 +1213,172 @@ async def background_removal_agent(image_path: str, analysis: Dict[str, Any]) ->
             "message": "Background removal not needed based on analysis"
         })
         return image_path
-    
+
+    # Determine which method to use
+    bg_method = os.getenv("BACKGROUND_REMOVAL_METHOD", "auto").lower()
     api_key = os.getenv("REMOVE_BG_API_KEY")
-    if not api_key:
+
+    # Decide on the method
+    use_rembg = False
+    if bg_method == "rembg":
+        use_rembg = True
+    elif bg_method == "remove.bg":
+        if not api_key:
+            writer({
+                "agent": "background",
+                "status": "error",
+                "message": "remove.bg requested but no API key provided"
+            })
+            return image_path
+        use_rembg = False
+    elif bg_method == "auto":
+        # Auto mode: use remove.bg if API key exists, otherwise use rembg
+        use_rembg = not api_key
+
+    if use_rembg:
+        # Use rembg (ML-based local processing)
         writer({
             "agent": "background",
-            "status": "skipped", 
-            "message": "Background removal skipped - no API key"
+            "status": "removing",
+            "message": "Removing background with rembg (ML-based)"
         })
-        return image_path
+
+        try:
+            from rembg import remove, new_session
+            from PIL import Image
+
+            # Load the image
+            input_img = Image.open(image_path)
+
+            # Get preferred model from env or use bria-rmbg by default
+            model = os.getenv("REMBG_MODEL", "bria-rmbg")
+
+            # Optional: Enable alpha matting for better edges
+            use_alpha_matting = os.getenv("REMBG_ALPHA_MATTING", "false").lower() == "true"
+
+            # Create a session with the specified model
+            try:
+                session = new_session(model)
+                writer({
+                    "agent": "background",
+                    "status": "info",
+                    "message": f"Using {model} model for background removal"
+                })
+            except Exception as e:
+                # Fallback to bria-rmbg if specified model fails
+                try:
+                    session = new_session('bria-rmbg')
+                    writer({
+                        "agent": "background",
+                        "status": "info",
+                        "message": f"Model {model} not available, using bria-rmbg (fallback)"
+                    })
+                except:
+                    # If bria-rmbg also fails, let remove() use its default
+                    session = None
+                    writer({
+                        "agent": "background",
+                        "status": "info",
+                        "message": "Using default u2net model"
+                    })
+
+            # Remove background with optional alpha matting for better edges
+            remove_kwargs = {}
+            if use_alpha_matting:
+                remove_kwargs['alpha_matting'] = True
+                remove_kwargs['alpha_matting_foreground_threshold'] = 240
+                remove_kwargs['alpha_matting_background_threshold'] = 50
+                remove_kwargs['alpha_matting_erode_size'] = 10
+
+            if session:
+                output_img = remove(input_img, session=session, **remove_kwargs)
+            else:
+                # Use model_name parameter if no session
+                output_img = remove(input_img, model_name=model, **remove_kwargs)
+
+            # Save as PNG first (preserves transparency)
+            png_path = str(Path(image_path).parent / f"{Path(image_path).stem}-rembg.png")
+            output_img.save(png_path, "PNG")
+
+            writer({
+                "agent": "background",
+                "status": "converting",
+                "message": "Converting PNG to WebP for further processing"
+            })
+
+            # Convert to WebP if ImageMagick is available
+            webp_path = str(Path(image_path).parent / f"{Path(image_path).stem}-rembg.webp")
+            try:
+                import subprocess
+                magick_cmd = get_imagemagick_command()
+
+                if not magick_cmd:
+                    webp_path = png_path
+                    result_ok = True
+                else:
+                    cmd = [magick_cmd, png_path, "-quality", "95", webp_path]
+                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+                    result_ok = (result.returncode == 0)
+
+                    if not result_ok:
+                        webp_path = png_path
+                        result_ok = True
+
+                writer({
+                    "agent": "background",
+                    "status": "complete",
+                    "output": webp_path,
+                    "message": f"Background removal complete (rembg): {Path(webp_path).name}"
+                })
+                return webp_path
+
+            except Exception as convert_error:
+                writer({
+                    "agent": "background",
+                    "status": "warning",
+                    "output": png_path,
+                    "message": f"Background removal complete (rembg), conversion failed: {convert_error}"
+                })
+                return png_path
+
+        except ImportError as e:
+            error_msg = f"rembg not installed or import error: {str(e)}"
+            print(f"❌ DEBUG: {error_msg}")
+            print(f"❌ SOLUTION: Make sure you're running with the virtual environment activated:")
+            print(f"             ./venv/bin/streamlit run streamlit_app.py")
+            print(f"             OR activate venv first: source venv/bin/activate")
+            writer({
+                "agent": "background",
+                "status": "error",
+                "message": "rembg not installed. Run: pip install rembg (in venv)"
+            })
+            # Fall back to remove.bg API if available
+            if api_key:
+                print(f"🔄 DEBUG: Falling back to remove.bg API since rembg import failed")
+                # Use the API code from below
+                pass
+            return image_path
+        except Exception as e:
+            error_msg = f"rembg background removal error: {str(e)}"
+            print(f"❌ DEBUG: {error_msg}")
+            import traceback
+            print(f"❌ DEBUG: Full traceback:\n{traceback.format_exc()}")
+            writer({
+                "agent": "background",
+                "status": "error",
+                "message": error_msg
+            })
+            return image_path
+
+    else:
+        # Use remove.bg API (original implementation)
+        if not api_key:
+            writer({
+                "agent": "background",
+                "status": "skipped",
+                "message": "Background removal skipped - no API key"
+            })
+            return image_path
     
     writer({
         "agent": "background",

@@ -17,7 +17,7 @@ from langgraph.config import get_stream_writer
 from .agents_enhanced import (
     enhanced_analysis_agent,
     gemini_edit_agent,
-    imagemagick_optimization_agent, 
+    imagemagick_optimization_agent,
     background_removal_agent,
     enhanced_qc_agent,
     AgentError,
@@ -302,7 +302,7 @@ async def enhanced_agentic_processor(
             # Simple analysis just for background removal - no complex analysis yet
             bg_analysis = {"remove_background": True}  # Force it since user enabled it
             bg_removed = await run_background_agent(current_image, bg_analysis)
-            
+
             if bg_removed != current_image:
                 current_image = bg_removed
                 intermediate_files.append(bg_removed)

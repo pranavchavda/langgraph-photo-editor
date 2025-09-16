@@ -113,7 +113,27 @@ ANTHROPIC_API_KEY=your_claude_key_here        # Claude Sonnet 4
 GEMINI_API_KEY=your_gemini_key_here           # Gemini 2.5 Flash
 
 # Optional services
-REMOVE_BG_API_KEY=your_removebg_key_here      # Background removal
+REMOVE_BG_API_KEY=your_removebg_key_here      # Background removal (remove.bg API)
+
+# Background removal configuration
+BACKGROUND_REMOVAL_METHOD=auto                # Options: "auto", "remove.bg", "rembg"
+                                              # auto: Use remove.bg if API key exists, else rembg
+                                              # remove.bg: Use remove.bg API (requires API key)
+                                              # rembg: Use local ML model (free, no API needed)
+
+REMBG_MODEL=bria-rmbg                        # rembg model options:
+                                              # - bria-rmbg: Best for product photos
+                                              # - u2net: General purpose, good quality
+                                              # - u2netp: Lightweight/faster version
+                                              # - u2net_human_seg: Optimized for people
+                                              # - u2net_cloth_seg: For clothing items
+                                              # - silueta: Compact model
+                                              # - isnet-general-use: High accuracy
+                                              # - isnet-anime: For anime/illustrations
+                                              # - birefnet-general: Latest architecture
+                                              # - birefnet-portrait: For human portraits
+
+REMBG_ALPHA_MATTING=false                    # Enable alpha matting for smoother edges (slower)
 
 # Processing settings (optional)
 MAX_CONCURRENT_IMAGES=3                        # Batch concurrency

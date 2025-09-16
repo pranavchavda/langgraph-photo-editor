@@ -163,7 +163,95 @@ with st.sidebar:
         st.success("✅ Gemini key loaded")
     if st.session_state.api_keys.get('removebg'):
         st.success("✅ Remove.bg key loaded")
-    
+
+    # Background Removal Method Selection
+    st.subheader("🖼️ Background Removal Settings")
+    bg_removal_method = st.radio(
+        "Choose Background Removal Method",
+        options=["auto", "remove.bg API", "rembg (free ML-based)"],
+        index=0,
+        help="""
+        • **auto**: Smart selection - Uses remove.bg if API key provided, otherwise free rembg
+        • **remove.bg API**: Professional service with high accuracy (requires API key above)
+        • **rembg**: Free open-source ML models running locally (no API needed!)
+        """
+    )
+
+    # Store the selection for processing
+    if bg_removal_method == "rembg (free ML-based)":
+        os.environ["BACKGROUND_REMOVAL_METHOD"] = "rembg"
+        st.info("✅ Using free rembg ML model - no API key needed!")
+    elif bg_removal_method == "remove.bg API":
+        os.environ["BACKGROUND_REMOVAL_METHOD"] = "remove.bg"
+        if not st.session_state.api_keys.get('removebg'):
+            st.warning("⚠️ remove.bg API selected but no API key provided above")
+    else:
+        os.environ["BACKGROUND_REMOVAL_METHOD"] = "auto"
+        if st.session_state.api_keys.get('removebg'):
+            st.success("✅ Auto mode: Will use remove.bg API")
+        else:
+            st.info("ℹ️ Auto mode: Will use free rembg (no API key detected)")
+
+    # Show rembg model selection when rembg is selected
+    if bg_removal_method == "rembg (free ML-based)":
+        col1, col2 = st.columns(2)
+
+        with col1:
+            rembg_model = st.selectbox(
+                "rembg Model",
+                options=[
+                    "bria-rmbg",
+                    "u2net",
+                    "u2netp",
+                    "u2net_human_seg",
+                    "u2net_cloth_seg",
+                    "silueta",
+                    "isnet-general-use",
+                    "isnet-anime",
+                    "sam",
+                    "birefnet-general",
+                    "birefnet-general-lite",
+                    "birefnet-portrait",
+                    "birefnet-dis",
+                    "birefnet-hrsod",
+                    "birefnet-cod",
+                    "birefnet-massive",
+                    "ben2-base"
+                ],
+                index=0,
+                help="""
+                **Product Photography:**
+                • **bria-rmbg**: Best for products (recommended)
+                • **birefnet-general**: High quality, latest architecture
+                • **isnet-general-use**: High accuracy general purpose
+
+                **General Purpose:**
+                • **u2net**: Default model, good balance
+                • **u2netp**: Lightweight (~4MB), faster but lower quality
+                • **silueta**: Smaller size (43MB), good balance
+
+                **Human/Portrait:**
+                • **u2net_human_seg**: Better for people, hair, clothing
+                • **birefnet-portrait**: Optimized for portraits
+                • **u2net_cloth_seg**: Clothing segmentation
+
+                **Specialized:**
+                • **isnet-anime**: Anime characters
+                • **sam**: Interactive segmentation with prompts
+                • **birefnet-hrsod**: High-res salient objects
+                • **birefnet-massive**: Trained on massive dataset
+                """
+            )
+            os.environ["REMBG_MODEL"] = rembg_model
+
+        with col2:
+            use_alpha_matting = st.checkbox(
+                "Enable Alpha Matting",
+                value=False,
+                help="Improves edge quality but slower processing"
+            )
+            os.environ["REMBG_ALPHA_MATTING"] = "true" if use_alpha_matting else "false"
+
     st.subheader("Processing Options")
     use_imagemagick = st.checkbox("Use ImageMagick Optimization", value=True,
                                  help="Traditional image processing for sharpening, color correction, and optimization. Disable to skip.")
@@ -608,7 +696,7 @@ with st.sidebar:
                 
                 # Display preview
                 with preview_placeholder.container():
-                    st.image(preview_bytes, caption="Preview (not full resolution)", use_container_width=True)
+                    st.image(preview_bytes, caption="Preview (not full resolution)", width="stretch")
                     st.caption("⚡ Real-time preview of adjustments")
                 
                 # Clean up temp file
@@ -1087,6 +1175,46 @@ elif mode == "📦 Batch Processing":
             batch_use_defect_repair = st.checkbox("Auto Dust & Scratch Repair 🧹", value=False, key="batch_defect",
                                     help="Automatically detect and remove dust spots, sensor debris, and scratches.")
             batch_remove_background = st.checkbox("Remove Background", value=True, key="batch_remove_bg")
+
+            # Show background removal method selection when enabled
+            batch_bg_method = "Use sidebar settings"  # Default value
+            batch_rembg_model = "bria-rmbg"  # Default model
+            if batch_remove_background:
+                batch_bg_method = st.selectbox(
+                    "Background Removal Method",
+                    options=["Use sidebar settings", "auto", "remove.bg API", "rembg (free)"],
+                    index=0,
+                    key="batch_bg_method",
+                    help="Use sidebar settings or override for this batch"
+                )
+
+                # Show model selection if rembg is chosen
+                if batch_bg_method == "rembg (free)":
+                    batch_rembg_model = st.selectbox(
+                        "rembg Model for Batch",
+                        options=[
+                            "bria-rmbg",
+                            "u2net",
+                            "u2netp",
+                            "u2net_human_seg",
+                            "u2net_cloth_seg",
+                            "silueta",
+                            "isnet-general-use",
+                            "isnet-anime",
+                            "sam",
+                            "birefnet-general",
+                            "birefnet-general-lite",
+                            "birefnet-portrait",
+                            "birefnet-dis",
+                            "birefnet-hrsod",
+                            "birefnet-cod",
+                            "birefnet-massive",
+                            "ben2-base"
+                        ],
+                        index=0,
+                        key="batch_rembg_model",
+                        help="Select the rembg model for this batch"
+                    )
             # Show 4K mode option when chunked Gemini is selected
             batch_use_4k_mode = False
             if batch_use_chunked_gemini:
@@ -1337,6 +1465,22 @@ elif mode == "📦 Batch Processing":
                                 os.environ["SKIP_BACKGROUND_REMOVAL"] = "true"
                             else:
                                 os.environ["SKIP_BACKGROUND_REMOVAL"] = "false"
+
+                                # Set background removal method for batch
+                                if batch_bg_method != "Use sidebar settings":
+                                    if batch_bg_method == "rembg (free)":
+                                        os.environ["BACKGROUND_REMOVAL_METHOD"] = "rembg"
+                                        os.environ["REMBG_MODEL"] = batch_rembg_model
+                                        print(f"📦 Batch: Setting background removal to rembg with model {batch_rembg_model}")
+                                    elif batch_bg_method == "remove.bg API":
+                                        os.environ["BACKGROUND_REMOVAL_METHOD"] = "remove.bg"
+                                        print(f"📦 Batch: Setting background removal to remove.bg")
+                                    else:  # "auto"
+                                        os.environ["BACKGROUND_REMOVAL_METHOD"] = "auto"
+                                        print(f"📦 Batch: Setting background removal to auto")
+                                else:
+                                    print(f"📦 Batch: Using sidebar settings for background removal")
+                                # Otherwise, sidebar settings are already set in os.environ
                             
                             # Set defect repair flag
                             if batch_use_defect_repair:
@@ -1467,7 +1611,17 @@ elif mode == "📦 Batch Processing":
                             else:
                                 os.environ["SKIP_REPAIR"] = "true"
                             os.environ["SKIP_BACKGROUND_REMOVAL"] = "false" if batch_remove_background else "true"
-                            
+
+                            # Set background removal method for batch consistency mode
+                            if batch_remove_background and batch_bg_method != "Use sidebar settings":
+                                if batch_bg_method == "rembg (free)":
+                                    os.environ["BACKGROUND_REMOVAL_METHOD"] = "rembg"
+                                    os.environ["REMBG_MODEL"] = batch_rembg_model
+                                elif batch_bg_method == "remove.bg API":
+                                    os.environ["BACKGROUND_REMOVAL_METHOD"] = "remove.bg"
+                                else:  # "auto"
+                                    os.environ["BACKGROUND_REMOVAL_METHOD"] = "auto"
+
                             if batch_use_chunked_gemini:
                                 os.environ["USE_CHUNKED_GEMINI"] = "true"
                                 os.environ["USE_4K_MODE"] = "true" if batch_use_4k_mode else "false"
@@ -1682,7 +1836,8 @@ elif mode == "❓ Help & Guide":
         2. Enter your API keys:
            - **Anthropic API Key** (Required) - Powers image analysis
            - **Gemini API Key** (Required for AI) - Powers AI editing
-           - **Remove.bg API Key** (Optional) - For background removal
+           - **Remove.bg API Key** (Optional) - For professional background removal
+             • Can use free rembg ML models instead - no API key needed!
         3. Click **💾 Save Keys**
         
         ✅ Your keys are saved in your browser and will persist across sessions!
@@ -1799,16 +1954,63 @@ elif mode == "❓ Help & Guide":
         - Saving API quota
         """)
     
+    with st.expander("**🖼️ Background Removal Options** 🆕"):
+        st.markdown("""
+        **Three Methods Available:**
+
+        **1. Auto Mode (Default)**
+        - Intelligently chooses the best method
+        - Uses remove.bg API if key provided
+        - Falls back to free rembg if no API key
+
+        **2. remove.bg API**
+        - Professional quality results
+        - Handles complex edges perfectly
+        - Requires API key (get free credits at remove.bg)
+
+        **3. rembg (Free ML Models)**
+        - No API key needed - runs locally!
+        - 17+ models available for different use cases:
+
+        **Product Photography (Recommended):**
+          • **bria-rmbg**: Best overall for products
+          • **birefnet-general**: High quality, latest tech
+          • **isnet-general-use**: High accuracy
+
+        **General Purpose:**
+          • **u2net**: Default, good balance
+          • **u2netp**: Fast & lightweight (4MB)
+          • **silueta**: Smaller size (43MB)
+
+        **People & Portraits:**
+          • **u2net_human_seg**: Hair & clothing
+          • **birefnet-portrait**: Portrait optimized
+          • **u2net_cloth_seg**: Clothing separation
+
+        **Specialized:**
+          • **isnet-anime**: Anime characters
+          • **sam**: Interactive segmentation
+          • **birefnet-massive**: Massive dataset trained
+
+        - First run downloads model (4MB-1GB depending on model)
+        - **Alpha Matting**: Enable for smoother edges
+
+        **Pro Tips:**
+        - Start with auto mode for convenience
+        - Use rembg for unlimited free processing
+        - bria-rmbg model works great for product photos
+        """)
+
     with st.expander("**Lens Corrections** (Default: OFF)"):
         st.markdown("""
         **What it does:** Fixes optical distortions from your camera lens
-        
+
         **Supported lenses:**
         - Sony FE 24-70mm F2.8 GM
         - Sony FE 90mm F2.8 Macro G OSS
         - Sony FE 50mm F1.4 GM
         - Sony FE 70-200mm F2.8 GM OSS
-        
+
         **Turn ON if you see:**
         - Barrel distortion (curved edges)
         - Dark corners (vignetting)
