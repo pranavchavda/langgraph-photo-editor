@@ -13,6 +13,8 @@ import subprocess
 from langgraph.func import entrypoint, task
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.config import get_stream_writer
+from .quality_config import get_quality_settings, save_with_quality, convert_for_api
+from .format_preservation import preserve_original_format, check_resolution_preserved, get_file_size_comparison
 
 from .agents_enhanced import (
     enhanced_analysis_agent,
@@ -278,7 +280,8 @@ async def enhanced_agentic_processor(
                     # Create WebP in same directory as original with proper .webp extension
                     # Remove .avif and add .webp
                     webp_path = Path(image_path).parent / f"{Path(image_path).stem}.webp"
-                    img.save(str(webp_path), 'WEBP', quality=95, method=6)
+                    quality_settings = get_quality_settings()
+                    save_with_quality(img, str(webp_path), source_format='WEBP', settings=quality_settings)
                     current_image = str(webp_path)
                     intermediate_files.append(str(webp_path))
                     print(f"🔄 Converted AVIF to WebP: {webp_path.name}")
@@ -349,16 +352,30 @@ async def enhanced_agentic_processor(
             if trim_cmd:
                 try:
                     output_path = Path(current_image).parent / f"{Path(current_image).stem}-trimmed{Path(current_image).suffix}"
+
+                    # Log input size
+                    input_size = os.path.getsize(current_image)
+                    print(f"📐 Before trim: {input_size / 1024 / 1024:.1f} MB")
+
+                    # Get quality settings
+                    quality_settings = get_quality_settings()
+                    quality_value = quality_settings.get('imagemagick_quality', 95)
+
                     # Use -fuzz to handle near-white/transparent pixels
-                    trim_command = f"{trim_cmd} '{current_image}' -trim -fuzz 5% '{output_path}'"
+                    # IMPORTANT: Add -quality to preserve quality during trim
+                    trim_command = f"{trim_cmd} '{current_image}' -trim -fuzz 5% -quality {quality_value} '{output_path}'"
+                    print(f"🔧 Trim command: {trim_command}")
                     result = subprocess.run(trim_command, shell=True, capture_output=True, text=True)
-                    
+
                     if result.returncode == 0 and output_path.exists():
+                        output_size = os.path.getsize(output_path)
+                        print(f"📐 After trim: {output_size / 1024 / 1024:.1f} MB")
+
                         current_image = str(output_path)
                         intermediate_files.append(str(output_path))
                         writer({
                             "stage": "trim_complete",
-                            "message": "Image trimmed successfully"
+                            "message": f"Image trimmed successfully ({output_size / 1024 / 1024:.1f} MB)"
                         })
                     else:
                         writer({
@@ -639,6 +656,29 @@ async def enhanced_agentic_processor(
                     "message": f"ImageMagick fallback failed: {e}"
                 })
         
+        # 🔄 Format Preservation (convert back to original format if needed)
+        if get_quality_settings().get("preserve_original_format", False):
+            writer({
+                "stage": "format_preservation",
+                "message": "Converting back to original format"
+            })
+            final_image_path = preserve_original_format(final_image_path, image_path)
+
+        # 📊 Resolution and Size Check
+        resolution_ok, resolution_msg = check_resolution_preserved(image_path, final_image_path)
+        size_comparison = get_file_size_comparison(image_path, final_image_path)
+
+        if not resolution_ok:
+            writer({
+                "stage": "resolution_warning",
+                "message": resolution_msg
+            })
+
+        writer({
+            "stage": "size_comparison",
+            "message": size_comparison
+        })
+
         # 🎯 Final Results
         final_quality = qc_result.get("quality_score", 0)
         passed_qc = qc_result.get("passed", False)

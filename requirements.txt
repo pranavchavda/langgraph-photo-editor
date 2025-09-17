@@ -24,3 +24,4 @@ Wand>=0.6.11  # Python bindings for ImageMagick
 aiohttp>=3.9.0  # For Google AI upscaling API calls
 rembg>=2.0.50  # ML-based background removal (alternative to remove.bg API)
 onnxruntime>=1.18.0  # Required runtime for rembg ML models
+pillow-avif-plugin>=1.4.0  # AVIF format support for preserving high-quality AVIF inputs

@@ -17,6 +17,7 @@ from anthropic import AsyncAnthropic
 import requests
 from langgraph.config import get_stream_writer
 from langgraph.func import task
+from .quality_config import get_quality_settings, save_with_quality, convert_for_api, get_imagemagick_quality_param
 
 # Global clients - initialized lazily
 anthropic_client = None
@@ -55,7 +56,7 @@ IMAGEMAGICK_BASE_CONFIG = {
     "sharpness": "1.0x0.5", # Moderate sharpening (Darktable sharpen enabled)
     "highlights": -5,       # Slight highlight recovery (Darktable highlights enabled)
     "shadows": 3,           # Slight shadow lift from RGB levels midpoint ~0.613
-    "quality": 95,          # Output quality
+    "quality": 100,         # Output quality (maximum by default)
     "vibrance": 0,          # Vibrance adjustment (-100 to +100) - affects less saturated colors
     "hue_shift": 0,         # Hue rotation in degrees (-180 to +180)
     "color_balance": {      # Color balance adjustments
@@ -90,9 +91,15 @@ def get_base_imagemagick_command():
         print(f"🎛️ Using custom base config: {custom_base}")
         return custom_base
     
+    # Get quality settings from quality_config module
+    quality_settings = get_quality_settings()
+
     # Load config from environment or use defaults
     config = IMAGEMAGICK_BASE_CONFIG.copy()
-    
+
+    # Override quality with the quality_config setting
+    config['quality'] = quality_settings.get('imagemagick_quality', 95)
+
     # Allow environment overrides for individual settings
     env_overrides = {
         'IMAGEMAGICK_GAMMA': ('gamma', float),
@@ -102,7 +109,7 @@ def get_base_imagemagick_command():
         'IMAGEMAGICK_SHARPNESS': ('sharpness', str),
         'IMAGEMAGICK_HIGHLIGHTS': ('highlights', int),
         'IMAGEMAGICK_SHADOWS': ('shadows', int),
-        'IMAGEMAGICK_QUALITY': ('quality', int),
+        'IMAGEMAGICK_QUALITY': ('quality', int),  # Can override with env var
         'IMAGEMAGICK_VIBRANCE': ('vibrance', int),
         'IMAGEMAGICK_HUE_SHIFT': ('hue_shift', int),
         'IMAGEMAGICK_DENOISE': ('denoise', int),
@@ -258,40 +265,79 @@ def get_imagemagick_command():
 
 
 def encode_image_to_base64(image_path: str) -> tuple[str, str]:
-    """Encode image to base64 string, converting AVIF if necessary
+    """Encode image to base64 string with quality preservation
     Returns: (base64_string, actual_image_path)
     """
-    path_obj = Path(image_path)
-    
-    # Check if it's an AVIF file that needs conversion
-    if path_obj.suffix.lower() == '.avif':
-        # Convert AVIF to WebP for Claude compatibility
-        from PIL import Image
-        import tempfile
-        
-        try:
-            # Open AVIF and save as WebP
-            with Image.open(image_path) as img:
-                # Create temp WebP file
-                temp_dir = tempfile.gettempdir()
-                temp_webp = Path(temp_dir) / f"temp_{path_obj.stem}.webp"
-                
-                # Save as WebP with high quality
-                img.save(str(temp_webp), 'WEBP', quality=95, method=6)
-                
-                # Read the WebP file
-                with open(temp_webp, "rb") as image_file:
-                    base64_data = base64.b64encode(image_file.read()).decode('utf-8')
-                
-                print(f"🔄 Converted AVIF to WebP for Claude analysis: {temp_webp.name}")
-                return base64_data, str(temp_webp)
-        except Exception as e:
-            print(f"⚠️ Failed to convert AVIF, trying direct encoding: {e}")
-            # Fall through to direct encoding
-    
-    # For non-AVIF or if conversion failed, encode directly
-    with open(image_path, "rb") as image_file:
-        return base64.b64encode(image_file.read()).decode('utf-8'), image_path
+    from PIL import Image
+    import tempfile
+
+    # Use quality_config for any necessary conversions
+    converted_path, was_converted = convert_for_api(image_path, api_name="claude")
+
+    try:
+        # Check file size
+        file_size = os.path.getsize(converted_path)
+
+        # Claude's limit is 5MB for base64 encoded images
+        # Base64 increases size by ~33%, so we need to stay under ~3.7MB
+        max_file_size = 3.7 * 1024 * 1024  # 3.7 MB before base64 encoding
+
+        analysis_image_path = converted_path  # Path for Claude analysis only
+
+        if file_size > max_file_size:
+            print(f"⚠️ Image too large for Claude ({file_size / 1024 / 1024:.1f} MB), compressing for analysis only...")
+
+            # Open and compress the image (same resolution, lower quality)
+            with Image.open(converted_path) as img:
+                # Save to temp file with compressed quality FOR CLAUDE ONLY
+                temp_file = tempfile.NamedTemporaryFile(suffix='.webp', delete=False)
+
+                # Use lower quality to get under size limit
+                # Start with quality 80 and reduce if needed
+                quality = 80
+                while quality >= 40:
+                    img.save(temp_file.name, 'WEBP', quality=quality, method=4)
+                    compressed_size = os.path.getsize(temp_file.name)
+
+                    if compressed_size <= max_file_size:
+                        print(f"✅ Compressed for Claude analysis: quality {quality}")
+                        print(f"📦 Size for Claude: {file_size / 1024 / 1024:.1f} MB → {compressed_size / 1024 / 1024:.1f} MB")
+                        print(f"📐 Resolution maintained: {img.width}x{img.height}")
+                        print(f"⚠️ NOTE: Full quality image will be used for processing")
+                        analysis_image_path = temp_file.name
+                        break
+
+                    quality -= 10
+                else:
+                    # If still too large, we have to resize as last resort
+                    print(f"⚠️ Cannot compress enough, resizing as last resort...")
+                    scale_factor = (max_file_size / compressed_size) ** 0.5
+                    new_width = int(img.width * scale_factor)
+                    new_height = int(img.height * scale_factor)
+                    resized = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                    resized.save(temp_file.name, 'WEBP', quality=70, method=4)
+                    print(f"📐 Resized for Claude: {img.width}x{img.height} → {new_width}x{new_height}")
+                    analysis_image_path = temp_file.name
+
+        # Read and encode the image FOR CLAUDE ANALYSIS
+        with open(analysis_image_path, "rb") as image_file:
+            encoded = base64.b64encode(image_file.read()).decode('utf-8')
+
+        # Clean up temporary analysis file if created
+        if analysis_image_path != converted_path and analysis_image_path != image_path:
+            try:
+                if os.path.exists(analysis_image_path):
+                    os.unlink(analysis_image_path)
+            except:
+                pass
+
+        # Return the encoded image for Claude and the ORIGINAL high-quality path for processing
+        return encoded, converted_path
+    except Exception as e:
+        print(f"⚠️ Failed to encode image: {e}")
+        # Fall back to original file if conversion failed
+        with open(image_path, "rb") as image_file:
+            return base64.b64encode(image_file.read()).decode('utf-8'), image_path
 
 
 def get_image_media_type(image_path: str) -> str:
@@ -727,7 +773,8 @@ async def gemini_edit_agent(image_path: str, analysis: Dict[str, Any]) -> str:
                 # Save flattened image to temp file
                 temp_dir = tempfile.gettempdir()
                 flattened_path = Path(temp_dir) / f"{Path(image_path).stem}_flattened.jpg"
-                img.save(str(flattened_path), 'JPEG', quality=95)
+                quality_settings = get_quality_settings()
+                save_with_quality(img, str(flattened_path), source_format='JPEG', settings=quality_settings)
                 working_image_path = str(flattened_path)
                 print(f"✅ Created flattened image for Gemini: {flattened_path.name}")
                 
@@ -852,7 +899,8 @@ async def gemini_edit_agent(image_path: str, analysis: Dict[str, Any]) -> str:
                                     try:
                                         # Save current image to temp file
                                         temp_path = f"/tmp/gemini_temp_{Path(image_path).stem}.png"
-                                        img.save(temp_path, 'PNG')
+                                        quality_settings = get_quality_settings()
+                                        save_with_quality(img, temp_path, source_format='PNG', settings=quality_settings)
                                         
                                         # Use AI upscaler
                                         from src.ai_upscaler_agent import upscale_with_ai
@@ -886,8 +934,9 @@ async def gemini_edit_agent(image_path: str, analysis: Dict[str, Any]) -> str:
                                         threshold=2
                                     ))
                                 
-                                # Save the final image
-                                img.save(output_path, 'WEBP', quality=95)
+                                # Save the final image with quality preservation
+                                quality_settings = get_quality_settings()
+                                save_with_quality(img, output_path, source_format='WEBP', settings=quality_settings)
                                 
                                 # Verify it was saved
                                 if os.path.getsize(output_path) > 0:
@@ -1154,31 +1203,58 @@ async def imagemagick_optimization_agent(image_path: str, analysis: Dict[str, An
             return image_path
         
         cmd_parts = imagemagick_command.strip().split()
-        
-        # Adjust command based on which ImageMagick binary is available
-        if magick_cmd == 'convert':
-            # Old ImageMagick format (v6 and earlier)
-            full_cmd = [magick_cmd, image_path] + cmd_parts + ["-flatten", output_path]
+
+        # Check if image has transparency (from background removal)
+        has_transparency = False
+        try:
+            from PIL import Image
+            with Image.open(image_path) as img:
+                has_transparency = img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info)
+                if has_transparency:
+                    writer({
+                        "agent": "imagemagick",
+                        "status": "info",
+                        "message": "Preserving transparency - not using -flatten"
+                    })
+        except:
+            # Check filename hints
+            if 'no-bg' in image_path or 'removed' in image_path or 'rembg' in image_path:
+                has_transparency = True
+
+        # Build command - only use -flatten if no transparency
+        if has_transparency:
+            # Preserve transparency - no flatten
+            full_cmd = [magick_cmd, image_path] + cmd_parts + [output_path]
         else:
-            # New ImageMagick format (v7+)
+            # No transparency - can use flatten
             full_cmd = [magick_cmd, image_path] + cmd_parts + ["-flatten", output_path]
         
+        # Log input size
+        input_size = os.path.getsize(image_path)
+        print(f"📥 ImageMagick input: {input_size / 1024 / 1024:.1f} MB")
+
         writer({
             "agent": "imagemagick",
             "status": "processing",
             "command": " ".join(full_cmd[2:-2]),  # Show just the processing part
             "message": f"Executing: {' '.join(cmd_parts)}"
         })
-        
+
+        # Show the full command for debugging
+        print(f"🔧 ImageMagick full command: {' '.join(full_cmd)}")
+
         # Execute command
         result = subprocess.run(full_cmd, capture_output=True, text=True, timeout=60)
-        
+
         if result.returncode == 0 and os.path.exists(output_path):
+            output_size = os.path.getsize(output_path)
+            print(f"📤 ImageMagick output: {output_size / 1024 / 1024:.1f} MB")
+
             writer({
                 "agent": "imagemagick",
                 "status": "complete",
                 "output": output_path,
-                "message": f"ImageMagick optimization complete: {Path(output_path).name}"
+                "message": f"ImageMagick optimization complete: {Path(output_path).name} ({output_size / 1024 / 1024:.1f} MB)"
             })
             return output_path
         else:
@@ -1298,7 +1374,8 @@ async def background_removal_agent(image_path: str, analysis: Dict[str, Any]) ->
 
             # Save as PNG first (preserves transparency)
             png_path = str(Path(image_path).parent / f"{Path(image_path).stem}-rembg.png")
-            output_img.save(png_path, "PNG")
+            quality_settings = get_quality_settings()
+            save_with_quality(output_img, png_path, source_format='PNG', settings=quality_settings)
 
             writer({
                 "agent": "background",
@@ -1316,7 +1393,9 @@ async def background_removal_agent(image_path: str, analysis: Dict[str, Any]) ->
                     webp_path = png_path
                     result_ok = True
                 else:
-                    cmd = [magick_cmd, png_path, "-quality", "95", webp_path]
+                    quality_settings = get_quality_settings()
+                    quality_value = str(quality_settings.get('imagemagick_quality', 95))
+                    cmd = [magick_cmd, png_path, "-quality", quality_value, webp_path]
                     result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
                     result_ok = (result.returncode == 0)
 
@@ -1385,18 +1464,76 @@ async def background_removal_agent(image_path: str, analysis: Dict[str, Any]) ->
         "status": "removing",
         "message": "Removing background with remove.bg API"
     })
-    
+
+    # Log input file size
+    input_size = os.path.getsize(image_path)
+    print(f"📤 Sending to remove.bg: {Path(image_path).name} ({input_size / 1024 / 1024:.1f} MB)")
+    writer({
+        "agent": "background",
+        "status": "info",
+        "message": f"Input file: {input_size / 1024 / 1024:.1f} MB"
+    })
+
     try:
+        # Determine size parameter based on quality preset
+        quality_settings = get_quality_settings()
+
+        # Check for explicit size parameter override
+        size_param = os.getenv('REMOVEBG_SIZE')
+
+        if size_param:
+            # User explicitly set the size
+            writer({
+                "agent": "background",
+                "status": "info",
+                "message": f"Using user-specified remove.bg size: {size_param}"
+            })
+        else:
+            # Choose size based on quality settings
+            if quality_settings.get('preserve_original_format') or quality_settings.get('imagemagick_quality', 95) >= 98:
+                # Maximum/Ultra quality - use full resolution
+                size_param = 'full'  # Full resolution, preserves all pixels
+                writer({
+                    "agent": "background",
+                    "status": "info",
+                    "message": "Using full resolution for remove.bg (highest quality, more credits)"
+                })
+            elif quality_settings.get('imagemagick_quality', 95) >= 95:
+                # High quality - use 4k
+                size_param = '4k'  # Up to 10MP
+                writer({
+                    "agent": "background",
+                    "status": "info",
+                    "message": "Using 4K resolution for remove.bg (high quality)"
+                })
+            else:
+                # Balanced/Web - use auto
+                size_param = 'auto'
+                writer({
+                    "agent": "background",
+                    "status": "info",
+                    "message": "Using auto resolution for remove.bg (balanced quality)"
+                })
+
         with open(image_path, 'rb') as image_file:
             response = requests.post(
                 'https://api.remove.bg/v1.0/removebg',
                 files={'image_file': image_file},
-                data={'size': 'auto'},
+                data={'size': size_param},
                 headers={'X-Api-Key': api_key},
                 timeout=30
             )
         
         if response.status_code == 200:
+            # Log response size
+            response_size = len(response.content)
+            writer({
+                "agent": "background",
+                "status": "info",
+                "message": f"remove.bg API response: {response_size / 1024 / 1024:.1f} MB (requested size: {size_param})"
+            })
+            print(f"📊 remove.bg response: {response_size / 1024 / 1024:.1f} MB for size '{size_param}'")
+
             # Step 1: Save as PNG (native format from remove.bg)
             png_path = str(Path(image_path).parent / f"{Path(image_path).stem}-no-bg.png")
             with open(png_path, 'wb') as out_file:
@@ -1408,26 +1545,60 @@ async def background_removal_agent(image_path: str, analysis: Dict[str, Any]) ->
                 "message": "Converting PNG to WebP for further processing"
             })
             
-            # Step 2: Convert PNG to WebP using ImageMagick
+            # Step 2: Convert PNG to WebP with quality preservation
             webp_path = str(Path(image_path).parent / f"{Path(image_path).stem}-no-bg.webp")
             try:
+                from PIL import Image
                 import subprocess
-                magick_cmd = get_imagemagick_command()
-                
-                # If ImageMagick not available, just use the PNG
-                if not magick_cmd:
-                    # Return PNG directly (Streamlit can display PNGs too)
-                    webp_path = png_path  # Just use the PNG path
+
+                # Get file size of PNG from remove.bg
+                png_size = os.path.getsize(png_path)
+                writer({
+                    "agent": "background",
+                    "status": "info",
+                    "message": f"PNG from remove.bg: {png_size / 1024 / 1024:.1f} MB"
+                })
+
+                # Try PIL first for better quality control
+                try:
+                    img = Image.open(png_path)
+                    quality_settings = get_quality_settings()
+                    save_with_quality(img, webp_path, source_format='WEBP', settings=quality_settings)
+                    img.close()
+
+                    webp_size = os.path.getsize(webp_path)
+                    print(f"📦 PNG→WebP conversion: {png_size / 1024 / 1024:.1f} MB → {webp_size / 1024 / 1024:.1f} MB (quality {quality_settings.get('webp_quality', 95)})")
+                    writer({
+                        "agent": "background",
+                        "status": "info",
+                        "message": f"Converted to WebP: {webp_size / 1024 / 1024:.1f} MB (quality {quality_settings.get('webp_quality', 95)})"
+                    })
                     result_ok = True
-                else:
-                    cmd = [magick_cmd, png_path, "-quality", "95", webp_path]
-                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-                    result_ok = (result.returncode == 0)
-                    
-                    if not result_ok:
-                        # Fallback to PNG if conversion fails
+
+                except Exception as pil_error:
+                    # Fall back to ImageMagick if PIL fails
+                    writer({
+                        "agent": "background",
+                        "status": "info",
+                        "message": f"PIL conversion failed, trying ImageMagick: {pil_error}"
+                    })
+
+                    magick_cmd = get_imagemagick_command()
+                    if not magick_cmd:
+                        # Return PNG directly if no converter available
                         webp_path = png_path
                         result_ok = True
+                    else:
+                        quality_settings = get_quality_settings()
+                        quality_value = str(quality_settings.get('imagemagick_quality', 95))
+                        cmd = [magick_cmd, png_path, "-quality", quality_value, webp_path]
+                        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+                        result_ok = (result.returncode == 0)
+
+                        if not result_ok:
+                            # Fallback to PNG if conversion fails
+                            webp_path = png_path
+                            result_ok = True
                 
                 if result_ok:
                     writer({

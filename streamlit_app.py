@@ -18,6 +18,7 @@ from streamlit_local_storage import LocalStorage
 
 # Import our existing workflow
 from src.workflow_enhanced import process_single_image_enhanced
+from src.quality_config import get_quality_settings
 try:
     from src.preview_utils import generate_preview_from_sliders
     PREVIEW_AVAILABLE = True
@@ -108,7 +109,7 @@ st.markdown("""
 # Sidebar for settings
 with st.sidebar:
     st.header("⚙️ Settings")
-    
+
     st.subheader("API Keys")
     
     # Use a form so file uploads don't clear the keys
@@ -251,6 +252,28 @@ with st.sidebar:
                 help="Improves edge quality but slower processing"
             )
             os.environ["REMBG_ALPHA_MATTING"] = "true" if use_alpha_matting else "false"
+
+    # Quality Settings
+    st.subheader("🎨 Quality Settings")
+    quality_preset = st.selectbox(
+        "Quality Preset",
+        options=['ultra', 'maximum', 'high', 'balanced', 'web'],
+        index=0,
+        help="Choose output quality. 'Ultra' (default) provides excellent quality with reasonable file sizes. 'Maximum' uses lossless compression for absolute best quality."
+    )
+
+    # Apply quality preset to environment
+    os.environ['QUALITY_PRESET'] = quality_preset
+
+    # Show quality details
+    quality_details = {
+        'maximum': '100% lossless, largest files',
+        'ultra': '98% quality, near-lossless',
+        'high': '95% quality, excellent',
+        'balanced': '92% quality, good',
+        'web': '85% quality, optimized for web'
+    }
+    st.caption(f"💡 {quality_details.get(quality_preset, '')}")
 
     st.subheader("Processing Options")
     use_imagemagick = st.checkbox("Use ImageMagick Optimization", value=True,

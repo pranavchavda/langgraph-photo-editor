@@ -356,14 +356,20 @@ async def process_single_with_enhanced_progress(
 
 @click.group()
 @click.option('--enhanced/--classic', default=True, help='Use enhanced Gemini 2.5 Flash workflow (default) or classic workflow')
+@click.option('--quality-preset', type=click.Choice(['maximum', 'ultra', 'high', 'balanced', 'web']),
+              default=None, help='Quality preset for image processing')
 @click.pass_context
-def cli(ctx, enhanced):
+def cli(ctx, enhanced, quality_preset):
     """🤖 Agentic Photo Editor with Gemini 2.5 Flash Image Support"""
     load_dotenv()
-    
+
     # Store enhanced flag in context
     ctx.ensure_object(dict)
     ctx.obj['enhanced'] = enhanced
+
+    # Set quality preset environment variable if provided
+    if quality_preset:
+        os.environ['QUALITY_PRESET'] = quality_preset
     
     # Check required API keys
     required_keys = ["ANTHROPIC_API_KEY"]
