@@ -305,6 +305,37 @@ IMAGEMAGICK_QUALITY=95                        # Output quality (1-100)
 - `rich>=13.0.0` - Terminal UI and progress display
 - `pillow>=10.0.0` - Image format handling
 
+## Docker Deployment (September 18, 2025)
+
+**Complete Dockerization for Doug:**
+- ✅ **One-click installer**: `curl | bash` script that installs Docker and sets up everything
+- ✅ **Docker memory optimization**: 16GB limit, 4GB shared memory for large images
+- ✅ **No more OOM crashes**: Fixed exit code 137 issues with proper resource limits
+- ✅ **Helper scripts**: Simple `doug_web.sh`, `doug_stop.sh` commands
+- ✅ **Cross-platform**: Works on Mac, Linux, and Windows (with WSL)
+- ✅ **No Python required**: Everything runs in container
+
+**Docker Architecture:**
+- **Multi-stage build**: Reduces image size
+- **UV support**: Optional Dockerfile.uv for faster builds
+- **OpenCV dependencies**: All libraries included (libgl1, etc.)
+- **Model caching**: ~/.u2net mounted as volume
+- **docker-compose.doug.yml**: Optimized configuration for production
+
+**Installation Options:**
+1. **Remote installer**: `curl -sSL https://raw.githubusercontent.com/pranavchavda/langgraph-photo-editor/main/install_doug.sh | bash`
+2. **Local setup**: `./doug_docker_setup.sh`
+3. **Manual**: Traditional docker-compose approach
+
+**Key Files Added:**
+- `Dockerfile` - Production container with pip
+- `Dockerfile.uv` - Alternative with UV package manager
+- `docker-compose.doug.yml` - Memory-optimized configuration
+- `install_doug.sh` - Remote installer script
+- `doug_*.sh` - Helper scripts for daily use
+- `.dockerignore` - Optimized build context
+- `INSTALL.md` - User-friendly installation guide
+
 ## Recent Improvements (Latest)
 
 **Quality Preservation System (November 2024):**
