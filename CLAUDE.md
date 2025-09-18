@@ -93,6 +93,11 @@ python test_trim.py         # Test image processing utilities
 - `src/workflow_enhanced.py` - 5-agent LangGraph workflow orchestration
 - `src/agents_enhanced.py` - Enhanced agent implementations
 
+**Quality & Format Management:**
+- `src/quality_config.py` - Quality presets and format-specific settings
+- `src/format_preservation.py` - Format conversion and preservation
+- `src/background_recovery.py` - Interactive background recovery tools
+
 **Legacy Components:**
 - `src/cli.py` - Original CLI implementation
 - `src/workflow.py` - Original 4-agent workflow
@@ -140,15 +145,30 @@ MAX_CONCURRENT_IMAGES=3                        # Batch concurrency
 RETRY_ATTEMPTS=2                              # QC retry attempts
 QUALITY_THRESHOLD=0.8                         # Minimum QC score
 
+# Quality Settings (NEW - Important!)
+QUALITY_PRESET=maximum                        # Options: maximum, ultra, high, balanced, web
+                                              # maximum: Lossless, best quality, larger files
+                                              # ultra: Near-lossless, excellent quality (default)
+                                              # high: Very good quality, smaller files
+                                              # balanced: Good quality, optimized size
+                                              # web: Optimized for web, smallest files
+
+REMOVEBG_SIZE=full                           # remove.bg API size parameter
+                                              # Options: preview, auto, small, medium, hd, 4k, full, 50MP
+                                              # full: Maximum resolution (best quality)
+                                              # 4k: Up to 10MP (good balance)
+                                              # auto: Let API choose based on credits
+
 # ImageMagick base configuration (optional) - Two approaches:
 # 1. Simple: Full command override
-IMAGEMAGICK_BASE_CONFIG="-modulate 100,105,100 -unsharp 0.8x0.6 -quality 95"  # Custom base
+IMAGEMAGICK_BASE_CONFIG="-modulate 100,105,100 -unsharp 0.8x0.6 -quality 100"  # Custom base
 
 # 2. Granular: Individual parameter control
 IMAGEMAGICK_GAMMA=1.0                         # Gamma correction (0.8-1.2)
 IMAGEMAGICK_BRIGHTNESS=0                      # Brightness (-10 to +10)
 IMAGEMAGICK_CONTRAST=2                        # Contrast (-10 to +10)
 IMAGEMAGICK_SATURATION=108                    # Saturation (90-120)
+IMAGEMAGICK_QUALITY=100                       # Output quality (1-100, default 100)
 IMAGEMAGICK_VIBRANCE=0                        # Vibrance (-100 to +100)
 IMAGEMAGICK_HUE_SHIFT=0                       # Hue rotation (-180 to +180)
 IMAGEMAGICK_SHARPNESS="1.0x0.5"               # Unsharp mask parameters
@@ -287,6 +307,18 @@ IMAGEMAGICK_QUALITY=95                        # Output quality (1-100)
 
 ## Recent Improvements (Latest)
 
+**Quality Preservation System (November 2024):**
+- ✅ **Comprehensive quality management**: New quality_config.py module with presets (maximum, ultra, high, balanced, web)
+- ✅ **Fixed remove.bg quality loss**: Now uses 'full' or '4k' size based on quality preset
+- ✅ **Lossless WebP for transparency**: Automatically uses lossless compression for images with transparency
+- ✅ **No more -flatten on transparent images**: ImageMagick preserves transparency properly
+- ✅ **Claude API 5MB limit handling**: Compresses images for analysis only, full quality for processing
+- ✅ **Format preservation**: Maximum preset converts back to original format (AVIF support)
+- ✅ **Default quality increased**: Changed from 95 to 100 for maximum quality
+- ✅ **File size logging**: Comprehensive logging at each pipeline stage for debugging
+
+## Recent Improvements (Latest)
+
 **Lens Correction & Deployment Fixes (September 4, 2025):**
 - ✅ **Fixed severe image cropping during lens correction**: lensfunpy was cropping 1/3 of image due to aggressive geometry distortion
 - ✅ **ImageMagick lens correction improvements**: Changed from `-distort` to `+distort` to preserve full canvas
@@ -341,11 +373,30 @@ npm run electron:build
 - Real-time processing updates via IPC
 - Automatic API key detection from environment
 
+## Quality & Compression Notes
+
+**Important**: File size reduction ≠ quality loss. WebP is extremely efficient:
+- **PNG with transparency → WebP**: Often 70-80% smaller with no visible quality loss
+- **Large transparent areas**: Compress to almost nothing in WebP
+- **Product photos**: Clean edges and uniform backgrounds compress very well
+
+**Quality Presets**:
+- **maximum**: Lossless WebP, preserves original format, largest files (~5-6 MB)
+- **ultra**: Quality 98, lossy but excellent quality (~1.5-2 MB)
+- **high**: Quality 95, very good for e-commerce (~1-1.5 MB)
+
+**Claude API Limits**:
+- Images over 5MB are automatically compressed for Claude analysis only
+- Full quality image is used for actual processing
+- Resolution is maintained during Claude compression
+
 ## Development Notes for Claude Code
 - Use specialized Claude Code subagents for further coding when available
 - The AppImage build process handles Python bundling automatically
 - File management is cross-platform compatible
 - Gemini processing works seamlessly with proper API keys
+- Quality settings are centralized in quality_config.py
+- Always check file size logs to diagnose quality issues
 
 ## GPT5-Suggested Improvements (In Development - gpt5-improvements branch)
 

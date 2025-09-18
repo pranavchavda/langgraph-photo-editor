@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  photo-editor:
+    build: .
+    image: langgraph-photo-editor:latest
+    container_name: photo-editor
+
+    # Memory settings for large image processing
+    mem_limit: 16g
+    memswap_limit: 20g
+    mem_reservation: 8g
+    shm_size: '4gb'  # Shared memory for OpenCV and image processing
+
+    # CPU settings
+    cpus: 6
+    cpu_shares: 1024
+
+    # Mount volumes for persistent data
+    volumes:
+      - ./input:/data/input          # Input images
+      - ./output:/data/output        # Processed images
+      - ./processed:/data/processed  # Archive of processed images
+      - ./.env:/app/.env            # API keys configuration
+      - ~/.u2net:/root/.u2net       # Cache AI models
+
+    # Environment variables (can be overridden by .env file)
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - REMOVE_BG_API_KEY=${REMOVE_BG_API_KEY:-}
+      - BACKGROUND_REMOVAL_METHOD=${BACKGROUND_REMOVAL_METHOD:-rembg}
+      - REMBG_MODEL=${REMBG_MODEL:-bria-rmbg}
+      - QUALITY_PRESET=${QUALITY_PRESET:-ultra}
+      - MAX_CONCURRENT_IMAGES=${MAX_CONCURRENT_IMAGES:-3}
+      # Memory optimization settings
+      - PYTHONUNBUFFERED=1
+      - OMP_NUM_THREADS=4
+      - OPENBLAS_NUM_THREADS=4
+      - MKL_NUM_THREADS=4
+      - VECLIB_MAXIMUM_THREADS=4
+      - NUMEXPR_NUM_THREADS=4
+
+    # Expose ports
+    ports:
+      - "8501:8501"  # Streamlit web UI
+
+    # Restart policy
+    restart: unless-stopped
+
+    # Health check with longer timeout for large images
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501"]
+      interval: 60s
+      timeout: 30s
+      retries: 5
+      start_period: 60s
+
+# Networks
+networks:
+  default:
+    name: photo-editor-network

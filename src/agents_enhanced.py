@@ -490,6 +490,11 @@ async def enhanced_analysis_agent(image_path: str, custom_instructions: Optional
         "- **Color Quality**: Saturation, vibrancy, accuracy needs"
     ])
     
+    # Define dust repair section for f-string
+    dust_repair_section = """
+    - dust_issues: [detected dust problems: spots, sensor_debris, surface_dirt]
+    - needs_dust_removal: boolean (true if dust issues detected)""" if use_defect_repair else ""
+
     # Enhanced analysis prompt for hybrid workflow
     analysis_prompt = f"""
     Analyze this product image and determine the optimal editing strategy. You must decide between:
@@ -553,7 +558,7 @@ async def enhanced_analysis_agent(image_path: str, custom_instructions: Optional
     Return analysis as JSON with:
     - lens_issues: [detected lens distortions: barrel, pincushion, vignetting, chromatic_aberration]
     - needs_lens_correction: boolean (true if lens issues detected)
-    - lens_corrections_applied: boolean (true if lens corrections will be applied by dedicated lens correction step){'\n    - dust_issues: [detected dust problems: spots, sensor_debris, surface_dirt]\n    - needs_dust_removal: boolean (true if dust issues detected)' if use_defect_repair else ''}
+    - lens_corrections_applied: boolean (true if lens corrections will be applied by dedicated lens correction step){dust_repair_section}
     - surface_materials: [materials detected]
     - lighting_issues: [specific problems]
     - color_problems: [color issues]

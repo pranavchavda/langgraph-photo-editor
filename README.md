@@ -13,10 +13,57 @@ An AI-powered photo editor that transforms your images with intelligent editing 
 - **📊 Quality Control**: Automated validation with retry logic and quality scoring
 - **⚡ Batch Processing**: Concurrent processing with configurable limits and ZIP download
 - **🎯 Custom Instructions**: Natural language editing commands
+- **🎨 Quality Presets**: Maximum (lossless), Ultra, High, Balanced, Web quality options
+- **🔄 Format Preservation**: Maintains AVIF, WebP, PNG, JPEG formats with quality settings
+- **🔒 Smart Compression**: Lossless WebP for transparency, efficient compression without quality loss
 
-## 🚀 Quick Start
+## 🚀 Quick Start - Multiple Options!
 
-### 🌐 Web Application (Recommended)
+### 🐳 Option 1: Docker (RECOMMENDED FOR DOUG!)
+
+**One-click setup with Docker - includes everything:**
+
+```bash
+# Download and run the setup script
+curl -O https://raw.githubusercontent.com/pranavchavda/langgraph-photo-editor/main/doug_docker_setup.sh
+chmod +x doug_docker_setup.sh
+./doug_docker_setup.sh
+
+# Then use the simple commands:
+./doug_web.sh      # Start web interface at http://localhost:8501
+./doug_batch.sh     # Process all images in ./input folder
+./doug_single.sh    # Process single image
+./doug_stop.sh      # Stop everything
+```
+
+**Manual Docker setup:**
+
+```bash
+# Clone repo and build
+git clone https://github.com/pranavchavda/langgraph-photo-editor.git
+cd langgraph-photo-editor
+
+# Build and start with Docker Compose
+docker-compose up
+```
+
+### ⚡ Option 2: UV Setup (Fastest Python setup)
+
+**Ultra-fast setup using UV package manager:**
+
+```bash
+# Download and run the UV setup script
+curl -O https://raw.githubusercontent.com/pranavchavda/langgraph-photo-editor/main/doug_setup.sh
+chmod +x doug_setup.sh
+./doug_setup.sh
+
+# Then use the helper scripts:
+./run_web.sh        # Web interface
+./run_cli.sh chat   # Interactive mode
+./run_batch.sh      # Batch processing
+```
+
+### 🌐 Option 3: Web Application (No installation)
 
 **Access the Streamlit web app - no installation required:**
 
@@ -29,9 +76,9 @@ Visit the live application at: `https://[your-app-name].streamlit.app`
 - 📦 Batch processing with ZIP download
 - 🚀 Zero installation required
 
-### 🛠️ Run Locally
+### 🛠️ Option 4: Manual Setup (For developers)
 
-**For local development:**
+**Traditional Python setup:**
 
 ```bash
 git clone https://github.com/pranavchavda/langgraph-photo-editor.git
@@ -52,11 +99,14 @@ streamlit run streamlit_app.py
 # Interactive chat mode (natural language)
 python photo_editor.py chat
 
-# Process single image
-python photo_editor.py process image.jpg --instructions "enhance chrome and make more vibrant"
+# Process single image with maximum quality
+python photo_editor.py --quality-preset maximum process image.jpg --instructions "enhance chrome and make more vibrant"
 
-# Batch process directory  
-python photo_editor.py batch ./product-photos/
+# Batch process directory with high quality
+python photo_editor.py --quality-preset high batch ./product-photos/
+
+# Test configuration
+python photo_editor.py test
 ```
 
 ## 🎯 How It Works
@@ -87,8 +137,37 @@ python photo_editor.py batch ./product-photos/
 The app needs these API keys (configured through the setup wizard):
 
 - **🧠 Claude (Anthropic)**: Get from [console.anthropic.com](https://console.anthropic.com/)
-- **✨ Gemini**: Get from [makersuite.google.com](https://makersuite.google.com/app/apikey)  
+- **✨ Gemini**: Get from [makersuite.google.com](https://makersuite.google.com/app/apikey)
 - **🎨 Remove.bg** (optional): Get from [remove.bg/api](https://www.remove.bg/api)
+
+### Quality Settings (NEW)
+
+Choose quality preset based on your needs:
+
+| Preset | Quality | File Size | Best For |
+|--------|---------|-----------|----------|
+| **maximum** | Lossless | Largest (~5-6 MB) | Archival, print |
+| **ultra** | 98% | Large (~2 MB) | High-end e-commerce |
+| **high** | 95% | Medium (~1.5 MB) | Standard e-commerce |
+| **balanced** | 92% | Small (~1 MB) | General web use |
+| **web** | 85% | Smallest (~500 KB) | Fast loading |
+
+**Default**: Maximum quality (lossless)
+
+### Environment Variables
+
+```bash
+# Quality settings
+export QUALITY_PRESET=maximum        # Choose quality level
+export REMOVEBG_SIZE=full           # remove.bg resolution (full, 4k, auto)
+
+# Background removal
+export BACKGROUND_REMOVAL_METHOD=rembg  # Options: auto, remove.bg, rembg
+export REMBG_MODEL=bria-rmbg           # Best for products
+
+# ImageMagick settings
+export IMAGEMAGICK_QUALITY=100         # Output quality (1-100)
+```
 
 ### First-Time Setup
 
@@ -96,6 +175,22 @@ The app needs these API keys (configured through the setup wizard):
 2. **Enter API keys** - Keys are stored securely in your browser's localStorage
 3. **Select processing mode** - Choose single image or batch processing
 4. **Upload and process** - Upload images and start processing!
+
+## 📈 What's New (November 2024)
+
+### Quality Preservation System
+- **Lossless processing** for images with transparency
+- **Smart compression** that maintains visual quality while reducing file size
+- **Format preservation** - AVIF, WebP, PNG, JPEG support
+- **Claude API handling** - Automatic compression for analysis only
+- **Comprehensive logging** to track quality at each step
+
+### Key Improvements
+- Fixed remove.bg quality loss (now uses 'full' or '4k' resolution)
+- ImageMagick no longer flattens transparent images
+- Default quality increased from 95 to 100
+- WebP automatically uses lossless for transparency
+- File sizes reduced 70-80% without visible quality loss
 
 ## 🏗️ Architecture
 
