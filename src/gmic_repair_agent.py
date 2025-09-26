@@ -52,8 +52,9 @@ async def gmic_repair_agent(
         }
     
     try:
-        # Prepare output path
-        output_path = str(Path("/tmp") / f"gmic_repaired_{Path(image_path).stem}.png")
+        # Prepare output path - preserve original format
+        original_suffix = Path(image_path).suffix or '.png'
+        output_path = str(Path("/tmp") / f"gmic_repaired_{Path(image_path).stem}{original_suffix}")
         filters_applied = []
         
         # Build G'MIC command
@@ -179,7 +180,8 @@ async def gmic_custom_filter(
         }
     
     if not output_path:
-        output_path = str(Path("/tmp") / f"gmic_custom_{Path(image_path).stem}.png")
+        original_suffix = Path(image_path).suffix or '.png'
+        output_path = str(Path("/tmp") / f"gmic_custom_{Path(image_path).stem}{original_suffix}")
     
     try:
         # Build command

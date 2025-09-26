@@ -101,9 +101,47 @@ async def enhanced_analysis_agent(image_path: str, custom_instructions: Optional
         "message": f"Analyzing {Path(image_path).name} and determining optimal editing strategy"
     })
     
+    # Check image size and compress if needed for Claude analysis
+    image_size = Path(image_path).stat().st_size
+    max_size = 5 * 1024 * 1024  # 5MB limit
+    compressed_image_path = None
+
+    if image_size > max_size:
+        print(f"⚠️ Image too large for Claude ({image_size/1024/1024:.1f} MB), compressing for analysis only...")
+        from PIL import Image
+
+        # Compress image maintaining resolution but reducing quality
+        original_img = Image.open(image_path)
+        original_width, original_height = original_img.size
+
+        # Calculate compression quality
+        quality = 80  # Start with 80% quality
+        compressed_image_path = f"/tmp/compressed_for_claude_{Path(image_path).stem}.jpg"
+
+        # Compress iteratively to get under 5MB
+        while quality >= 30:  # Don't go below 30% quality
+            original_img.save(compressed_image_path, format='JPEG', quality=quality)
+            compressed_size = Path(compressed_image_path).stat().st_size
+
+            if compressed_size <= max_size:
+                print(f"✅ Compressed for Claude analysis: quality {quality}")
+                print(f"📦 Size for Claude: {image_size/1024/1024:.1f} MB → {compressed_size/1024/1024:.1f} MB")
+                print(f"📐 Resolution maintained: {original_width}x{original_height}")
+                print(f"⚠️ NOTE: Full quality image will be used for processing")
+                break
+
+            quality -= 10
+
+        if quality < 30:
+            print("⚠️ Could not compress image to under 5MB, using original")
+            compressed_image_path = None
+
+    # Use compressed image for analysis if available, otherwise original
+    analysis_image_path = compressed_image_path or image_path
+
     # Encode image
-    image_base64 = encode_image_to_base64(image_path)
-    media_type = get_image_media_type(image_path)
+    image_base64 = encode_image_to_base64(analysis_image_path)
+    media_type = get_image_media_type(analysis_image_path)
     
     # Enhanced analysis prompt for hybrid workflow
     analysis_prompt = """
@@ -307,6 +345,14 @@ async def enhanced_analysis_agent(image_path: str, custom_instructions: Optional
             "message": f"Analysis complete - Strategy: {analysis_result.get('editing_strategy', 'unknown')}"
         })
         
+        # Clean up compressed file if it exists
+        if compressed_image_path and Path(compressed_image_path).exists():
+            try:
+                Path(compressed_image_path).unlink()
+                print(f"🧹 Cleaned up compressed analysis file")
+            except Exception as e:
+                print(f"⚠️ Could not clean up compressed file: {e}")
+
         return analysis_result
         
     except Exception as e:

@@ -37,7 +37,10 @@ async def opencv_inpaint_agent(
     
     try:
         # Load image and mask
-        img = cv2.imread(image_path)
+        # Load in RGB mode to avoid BGR/RGB issues
+        img = cv2.imread(image_path, cv2.IMREAD_COLOR)
+        if img is not None:
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
         
         if img is None or mask is None:
@@ -94,9 +97,12 @@ async def opencv_inpaint_agent(
             result = cv2.inpaint(img, mask, inpaint_radius, cv2.INPAINT_TELEA)
             method_name = "Telea (fallback)"
         
-        # Save result
-        output_path = str(Path("/tmp") / f"opencv_inpainted_{Path(image_path).stem}.png")
-        cv2.imwrite(output_path, result)
+        # Save result - preserve original format
+        # Convert back to BGR for cv2.imwrite
+        result_bgr = cv2.cvtColor(result, cv2.COLOR_RGB2BGR)
+        original_suffix = Path(image_path).suffix or '.png'
+        output_path = str(Path("/tmp") / f"opencv_inpainted_{Path(image_path).stem}{original_suffix}")
+        cv2.imwrite(output_path, result_bgr)
         
         print(f"✅ Inpainting complete using {method_name}")
         
