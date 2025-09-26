@@ -106,6 +106,8 @@ async def enhanced_analysis_agent(image_path: str, custom_instructions: Optional
     max_size = 5 * 1024 * 1024  # 5MB limit
     compressed_image_path = None
 
+    print(f"📊 Debug: Image size: {image_size/1024/1024:.1f} MB (limit: {max_size/1024/1024:.1f} MB)")
+
     if image_size > max_size:
         print(f"⚠️ Image too large for Claude ({image_size/1024/1024:.1f} MB), compressing for analysis only...")
         from PIL import Image
@@ -117,6 +119,10 @@ async def enhanced_analysis_agent(image_path: str, custom_instructions: Optional
         # Calculate compression quality
         quality = 80  # Start with 80% quality
         compressed_image_path = f"/tmp/compressed_for_claude_{Path(image_path).stem}.jpg"
+
+        # Convert to RGB if needed for JPEG saving
+        if original_img.mode in ('RGBA', 'P', 'LA'):
+            original_img = original_img.convert('RGB')
 
         # Compress iteratively to get under 5MB
         while quality >= 30:  # Don't go below 30% quality
