@@ -732,14 +732,6 @@ async def enhanced_analysis_agent(image_path: str, custom_instructions: Optional
             "strategy": analysis_result.get("editing_strategy", "unknown"),
             "message": f"Analysis complete - Strategy: {analysis_result.get('editing_strategy', 'unknown')}"
         })
-        
-        # Clean up compressed file if it exists
-        if compressed_image_path and Path(compressed_image_path).exists():
-            try:
-                Path(compressed_image_path).unlink()
-                print(f"🧹 Cleaned up compressed analysis file")
-            except Exception as e:
-                print(f"⚠️ Could not clean up compressed file: {e}")
 
         return analysis_result
         
