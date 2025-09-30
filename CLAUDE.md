@@ -4,22 +4,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is an AI-powered agentic photo editor that combines Claude Sonnet 4 vision analysis with Gemini 2.5 Flash AI image editing to optimize product photography for e-commerce. The system uses LangGraph for multi-agent workflow orchestration.
+This is an AI-powered agentic photo editor that combines Claude Sonnet 4.5 vision analysis with Gemini 2.5 Flash AI image editing to optimize product photography for e-commerce. The system uses LangGraph for multi-agent workflow orchestration.
 
 ## Architecture
 
 **Multi-Agent LangGraph Workflow:**
-- **Enhanced Analysis Agent** (Claude Sonnet 4) - Determines optimal processing strategy
+- **Enhanced Analysis Agent** (Claude Sonnet 4.5) - Determines optimal processing strategy
 - **Gemini Edit Agent** (Gemini 2.5 Flash) - Performs AI image editing with natural language
-- **Background Agent** (remove.bg API) - Professional background removal  
+- **Background Agent** (remove.bg API + rembg ML) - Professional & free background removal
 - **ImageMagick Agent** - Parameter-based optimizations as fallback
-- **QC Agent** (Claude) - Quality validation and retry logic
+- **QC Agent** (Claude Sonnet 4.5) - Quality validation and retry logic
 
 **Core Technologies:**
 - LangGraph with functional API (`@task` decorators, `@entrypoint` orchestrator)
-- Claude Sonnet 4 for vision analysis and quality control
+- Claude Sonnet 4.5 (`claude-sonnet-4-5-20250929`) for vision analysis and quality control
 - Gemini 2.5 Flash for AI-powered image editing
 - ImageMagick for traditional photo optimization
+- rembg for free local background removal (no API needed)
 - Rich terminal UI for progress tracking
 
 ## Streamlit Web Application
@@ -114,7 +115,7 @@ python test_trim.py         # Test image processing utilities
 
 ```bash
 # Core AI APIs
-ANTHROPIC_API_KEY=your_claude_key_here        # Claude Sonnet 4
+ANTHROPIC_API_KEY=your_claude_key_here        # Claude Sonnet 4.5 (claude-sonnet-4-5-20250929)
 GEMINI_API_KEY=your_gemini_key_here           # Gemini 2.5 Flash
 
 # Optional services
@@ -143,7 +144,8 @@ REMBG_ALPHA_MATTING=false                    # Enable alpha matting for smoother
 # Processing settings (optional)
 MAX_CONCURRENT_IMAGES=3                        # Batch concurrency
 RETRY_ATTEMPTS=2                              # QC retry attempts
-QUALITY_THRESHOLD=0.8                         # Minimum QC score
+QUALITY_THRESHOLD=5.0                         # Minimum QC score (0-10 scale, 5=acceptable)
+SKIP_RETRIES=false                            # Set to true to disable retries for faster processing
 
 # Quality Settings (NEW - Important!)
 QUALITY_PRESET=maximum                        # Options: maximum, ultra, high, balanced, web
@@ -338,6 +340,19 @@ IMAGEMAGICK_QUALITY=95                        # Output quality (1-100)
 
 ## Recent Improvements (Latest)
 
+**Claude Sonnet 4.5 Upgrade & Background Removal Enhancements (September 30, 2025):**
+- ✅ **Claude Sonnet 4.5 upgrade**: Upgraded from Sonnet 4 to Sonnet 4.5 (`claude-sonnet-4-5-20250929`) - same model as Claude Code
+- ✅ **3-mode background removal**: Auto (smart selection), rembg (free ML-based), remove.bg (API)
+  - Auto mode: Uses remove.bg if API key exists, otherwise falls back to rembg
+  - rembg: Free local processing with 21 model options (bria-rmbg, u2net, birefnet, etc.)
+  - remove.bg: Professional cloud API service
+- ✅ **Alpha matting support**: Optional alpha matting for better edge quality (smoother edges, better for hair/fur)
+- ✅ **Improved QC scoring**: More realistic scoring (5-6 = acceptable, not poor). Threshold lowered from 7.0 to 5.0
+- ✅ **Skip Quality Retries option**: User can disable automatic retries for faster processing
+- ✅ **Enhanced error logging**: Detailed tracebacks with error type, message, and helpful solutions
+- ✅ **API key parameter passing**: Cleaner architecture passing keys as function parameters
+- ✅ **Fixed merge conflicts**: Resolved duplicate code from main branch quality improvements integration
+
 **Quality Preservation System (November 2024):**
 - ✅ **Comprehensive quality management**: New quality_config.py module with presets (maximum, ultra, high, balanced, web)
 - ✅ **Fixed remove.bg quality loss**: Now uses 'full' or '4k' size based on quality preset
@@ -429,7 +444,9 @@ npm run electron:build
 - Quality settings are centralized in quality_config.py
 - Always check file size logs to diagnose quality issues
 
-## GPT5-Suggested Improvements (In Development - gpt5-improvements branch)
+## Future Improvements to Consider (GPT5-Suggested)
+
+**Note**: The gpt5-improvements branch has been merged into main (Sept 30, 2025), bringing Claude Sonnet 4.5 and enhanced background removal. The improvements below are future enhancements still under consideration.
 
 ### New Dust & Scratch Repair Pipeline
 **Problem Solved**: Explicit defect detection and repair instead of hoping AI enhancement removes them
