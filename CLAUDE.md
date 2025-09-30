@@ -93,6 +93,11 @@ python test_trim.py         # Test image processing utilities
 - `src/workflow_enhanced.py` - 5-agent LangGraph workflow orchestration
 - `src/agents_enhanced.py` - Enhanced agent implementations
 
+**Quality & Format Management:**
+- `src/quality_config.py` - Quality presets and format-specific settings
+- `src/format_preservation.py` - Format conversion and preservation
+- `src/background_recovery.py` - Interactive background recovery tools
+
 **Legacy Components:**
 - `src/cli.py` - Original CLI implementation
 - `src/workflow.py` - Original 4-agent workflow
@@ -113,18 +118,132 @@ ANTHROPIC_API_KEY=your_claude_key_here        # Claude Sonnet 4
 GEMINI_API_KEY=your_gemini_key_here           # Gemini 2.5 Flash
 
 # Optional services
-REMOVE_BG_API_KEY=your_removebg_key_here      # Background removal
+REMOVE_BG_API_KEY=your_removebg_key_here      # Background removal (remove.bg API)
+
+# Background removal configuration
+BACKGROUND_REMOVAL_METHOD=auto                # Options: "auto", "remove.bg", "rembg"
+                                              # auto: Use remove.bg if API key exists, else rembg
+                                              # remove.bg: Use remove.bg API (requires API key)
+                                              # rembg: Use local ML model (free, no API needed)
+
+REMBG_MODEL=bria-rmbg                        # rembg model options:
+                                              # - bria-rmbg: Best for product photos
+                                              # - u2net: General purpose, good quality
+                                              # - u2netp: Lightweight/faster version
+                                              # - u2net_human_seg: Optimized for people
+                                              # - u2net_cloth_seg: For clothing items
+                                              # - silueta: Compact model
+                                              # - isnet-general-use: High accuracy
+                                              # - isnet-anime: For anime/illustrations
+                                              # - birefnet-general: Latest architecture
+                                              # - birefnet-portrait: For human portraits
+
+REMBG_ALPHA_MATTING=false                    # Enable alpha matting for smoother edges (slower)
 
 # Processing settings (optional)
 MAX_CONCURRENT_IMAGES=3                        # Batch concurrency
 RETRY_ATTEMPTS=2                              # QC retry attempts
-QUALITY_THRESHOLD=5.0                         # Minimum QC score (0-10 scale, 5=acceptable)
-SKIP_RETRIES=false                            # Set to true to disable retries for faster processing
+QUALITY_THRESHOLD=0.8                         # Minimum QC score
+
+# Quality Settings (NEW - Important!)
+QUALITY_PRESET=maximum                        # Options: maximum, ultra, high, balanced, web
+                                              # maximum: Lossless, best quality, larger files
+                                              # ultra: Near-lossless, excellent quality (default)
+                                              # high: Very good quality, smaller files
+                                              # balanced: Good quality, optimized size
+                                              # web: Optimized for web, smallest files
+
+REMOVEBG_SIZE=full                           # remove.bg API size parameter
+                                              # Options: preview, auto, small, medium, hd, 4k, full, 50MP
+                                              # full: Maximum resolution (best quality)
+                                              # 4k: Up to 10MP (good balance)
+                                              # auto: Let API choose based on credits
+
+# ImageMagick base configuration (optional) - Two approaches:
+# 1. Simple: Full command override
+IMAGEMAGICK_BASE_CONFIG="-modulate 100,105,100 -unsharp 0.8x0.6 -quality 100"  # Custom base
+
+# 2. Granular: Individual parameter control
+IMAGEMAGICK_GAMMA=1.0                         # Gamma correction (0.8-1.2)
+IMAGEMAGICK_BRIGHTNESS=0                      # Brightness (-10 to +10)
+IMAGEMAGICK_CONTRAST=2                        # Contrast (-10 to +10)
+IMAGEMAGICK_SATURATION=108                    # Saturation (90-120)
+IMAGEMAGICK_QUALITY=100                       # Output quality (1-100, default 100)
+IMAGEMAGICK_VIBRANCE=0                        # Vibrance (-100 to +100)
+IMAGEMAGICK_HUE_SHIFT=0                       # Hue rotation (-180 to +180)
+IMAGEMAGICK_SHARPNESS="1.0x0.5"               # Unsharp mask parameters
+IMAGEMAGICK_HIGHLIGHTS=-5                     # Highlight recovery (-20 to 0)
+IMAGEMAGICK_SHADOWS=3                         # Shadow lifting (0 to 20)
+IMAGEMAGICK_DENOISE=0                         # Noise reduction (0-100)
+IMAGEMAGICK_BLUR=0                            # Gaussian blur (0-10)
+IMAGEMAGICK_TRIM=false                        # Auto-trim whitespace
+IMAGEMAGICK_TRIM_FUZZ=5                       # Trim tolerance (%)
+IMAGEMAGICK_AUTO_LEVEL=false                  # Auto-level (careful!)
+IMAGEMAGICK_AUTO_GAMMA=false                  # Auto-gamma
+IMAGEMAGICK_NORMALIZE=false                   # Normalize (often overexposes)
+IMAGEMAGICK_RESIZE=""                         # Resize (e.g., "1920x1080")
+IMAGEMAGICK_COLORSPACE=""                     # Colorspace (e.g., "sRGB")
+IMAGEMAGICK_QUALITY=95                        # Output quality (1-100)
 ```
+
+## ImageMagick Base Configuration System
+
+**Purpose**: Provides consistent baseline ImageMagick optimizations inspired by Darktable professional presets
+
+**Default Base Configuration (Darktable-inspired):**
+- Gamma: 1.0 (neutral, matching Darktable)
+- Brightness: 0 (no adjustment)
+- Contrast: 2 (slight boost from RGB levels)
+- Saturation: 108 (moderate boost)
+- Sharpness: 1.0x0.5 unsharp mask (Darktable sharpen)
+- Highlights: -5 (slight recovery)
+- Shadows: +3 (slight lift from RGB levels ~0.613 midpoint)
+- Quality: 95
+
+**How it Works:**
+1. Analysis agent starts with the Darktable-inspired base configuration
+2. Claude suggests adjustments as deltas (e.g., gamma_delta: +0.02)
+3. Deltas are applied to create the final command
+4. Ensures consistency across generations while allowing flexibility
+
+**Customization Options:**
+
+1. **Simple Override**: Set `IMAGEMAGICK_BASE_CONFIG` for a complete command
+   ```bash
+   export IMAGEMAGICK_BASE_CONFIG="-gamma 1.1 -modulate 105,110,100 -quality 95"
+   ```
+
+2. **Granular Control**: Set individual parameters
+   ```bash
+   export IMAGEMAGICK_GAMMA=1.05
+   export IMAGEMAGICK_SATURATION=115
+   export IMAGEMAGICK_TRIM=true
+   ```
+
+3. **Use Presets**: Source the config examples
+   ```bash
+   source imagemagick_config_examples.sh && chrome_metal
+   python photo_editor.py process image.jpg
+   ```
+
+**Available Presets:**
+- `natural_product` - Subtle enhancement for natural look
+- `vibrant_ecommerce` - Punchy colors for e-commerce
+- `chrome_metal` - Optimized for reflective surfaces
+- `soft_matte` - Gentle processing for matte products
+- `high_key` - Bright, white background optimization
+
+**Advanced Features:**
+- **Vibrance**: Affects less saturated colors more than saturation
+- **Color Balance**: Per-channel RGB adjustments
+- **CLAHE**: Contrast Limited Adaptive Histogram Equalization
+- **Trim with Fuzz**: Intelligent whitespace removal
+- **Colorspace Conversion**: Work in different color spaces
+- **Per-Channel Operations**: Apply different effects to R/G/B channels
 
 ## File I/O Patterns
 
-**Input Formats:** JPG, JPEG, PNG, WebP
+**Input Formats:** JPG, JPEG, PNG, WebP, AVIF
 **Output Format:** Always WebP (preserves transparency from background removal)
 
 **Directory Structure:**
@@ -186,6 +305,49 @@ SKIP_RETRIES=false                            # Set to true to disable retries f
 - `rich>=13.0.0` - Terminal UI and progress display
 - `pillow>=10.0.0` - Image format handling
 
+## Docker Deployment (September 18, 2025)
+
+**Complete Dockerization for Doug:**
+- ✅ **One-click installer**: `curl | bash` script that installs Docker and sets up everything
+- ✅ **Docker memory optimization**: 16GB limit, 4GB shared memory for large images
+- ✅ **No more OOM crashes**: Fixed exit code 137 issues with proper resource limits
+- ✅ **Helper scripts**: Simple `doug_web.sh`, `doug_stop.sh` commands
+- ✅ **Cross-platform**: Works on Mac, Linux, and Windows (with WSL)
+- ✅ **No Python required**: Everything runs in container
+
+**Docker Architecture:**
+- **Multi-stage build**: Reduces image size
+- **UV support**: Optional Dockerfile.uv for faster builds
+- **OpenCV dependencies**: All libraries included (libgl1, etc.)
+- **Model caching**: ~/.u2net mounted as volume
+- **docker-compose.doug.yml**: Optimized configuration for production
+
+**Installation Options:**
+1. **Remote installer**: `curl -sSL https://raw.githubusercontent.com/pranavchavda/langgraph-photo-editor/main/install_doug.sh | bash`
+2. **Local setup**: `./doug_docker_setup.sh`
+3. **Manual**: Traditional docker-compose approach
+
+**Key Files Added:**
+- `Dockerfile` - Production container with pip
+- `Dockerfile.uv` - Alternative with UV package manager
+- `docker-compose.doug.yml` - Memory-optimized configuration
+- `install_doug.sh` - Remote installer script
+- `doug_*.sh` - Helper scripts for daily use
+- `.dockerignore` - Optimized build context
+- `INSTALL.md` - User-friendly installation guide
+
+## Recent Improvements (Latest)
+
+**Quality Preservation System (November 2024):**
+- ✅ **Comprehensive quality management**: New quality_config.py module with presets (maximum, ultra, high, balanced, web)
+- ✅ **Fixed remove.bg quality loss**: Now uses 'full' or '4k' size based on quality preset
+- ✅ **Lossless WebP for transparency**: Automatically uses lossless compression for images with transparency
+- ✅ **No more -flatten on transparent images**: ImageMagick preserves transparency properly
+- ✅ **Claude API 5MB limit handling**: Compresses images for analysis only, full quality for processing
+- ✅ **Format preservation**: Maximum preset converts back to original format (AVIF support)
+- ✅ **Default quality increased**: Changed from 95 to 100 for maximum quality
+- ✅ **File size logging**: Comprehensive logging at each pipeline stage for debugging
+
 ## Recent Improvements (Latest)
 
 **Lens Correction & Deployment Fixes (September 4, 2025):**
@@ -242,11 +404,30 @@ npm run electron:build
 - Real-time processing updates via IPC
 - Automatic API key detection from environment
 
+## Quality & Compression Notes
+
+**Important**: File size reduction ≠ quality loss. WebP is extremely efficient:
+- **PNG with transparency → WebP**: Often 70-80% smaller with no visible quality loss
+- **Large transparent areas**: Compress to almost nothing in WebP
+- **Product photos**: Clean edges and uniform backgrounds compress very well
+
+**Quality Presets**:
+- **maximum**: Lossless WebP, preserves original format, largest files (~5-6 MB)
+- **ultra**: Quality 98, lossy but excellent quality (~1.5-2 MB)
+- **high**: Quality 95, very good for e-commerce (~1-1.5 MB)
+
+**Claude API Limits**:
+- Images over 5MB are automatically compressed for Claude analysis only
+- Full quality image is used for actual processing
+- Resolution is maintained during Claude compression
+
 ## Development Notes for Claude Code
 - Use specialized Claude Code subagents for further coding when available
 - The AppImage build process handles Python bundling automatically
 - File management is cross-platform compatible
 - Gemini processing works seamlessly with proper API keys
+- Quality settings are centralized in quality_config.py
+- Always check file size logs to diagnose quality issues
 
 ## GPT5-Suggested Improvements (In Development - gpt5-improvements branch)
 

@@ -1,0 +1,93 @@
+version: '3.8'
+
+services:
+  photo-editor:
+    build: .
+    image: langgraph-photo-editor:latest
+    container_name: photo-editor
+
+    # Memory and runtime settings
+    shm_size: '2gb'  # Shared memory for large image processing
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+
+    # Mount volumes for persistent data
+    volumes:
+      - ./input:/data/input          # Input images
+      - ./output:/data/output        # Processed images
+      - ./processed:/data/processed  # Archive of processed images
+      - ./.env:/app/.env            # API keys configuration
+      - ~/.u2net:/root/.u2net       # Cache AI models
+
+    # Environment variables (can be overridden by .env file)
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - REMOVE_BG_API_KEY=${REMOVE_BG_API_KEY:-}
+      - BACKGROUND_REMOVAL_METHOD=${BACKGROUND_REMOVAL_METHOD:-rembg}
+      - REMBG_MODEL=${REMBG_MODEL:-bria-rmbg}
+      - QUALITY_PRESET=${QUALITY_PRESET:-ultra}
+      - MAX_CONCURRENT_IMAGES=${MAX_CONCURRENT_IMAGES:-3}
+
+    # Expose ports
+    ports:
+      - "8501:8501"  # Streamlit web UI
+
+    # Resource limits - INCREASED for large images
+    deploy:
+      resources:
+        limits:
+          cpus: '6'
+          memory: 16G
+        reservations:
+          cpus: '2'
+          memory: 8G
+
+    # Restart policy
+    restart: unless-stopped
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Background job processor for batch operations
+  photo-batch:
+    build: .
+    image: langgraph-photo-editor:latest
+    container_name: photo-batch
+    profiles: ["batch"]  # Only start with --profile batch
+
+    volumes:
+      - ./input:/data/input
+      - ./output:/data/output
+      - ./processed:/data/processed
+      - ./.env:/app/.env
+      - ~/.u2net:/root/.u2net
+
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - REMOVE_BG_API_KEY=${REMOVE_BG_API_KEY:-}
+      - BACKGROUND_REMOVAL_METHOD=${BACKGROUND_REMOVAL_METHOD:-rembg}
+      - REMBG_MODEL=${REMBG_MODEL:-bria-rmbg}
+      - QUALITY_PRESET=${QUALITY_PRESET:-ultra}
+      - MAX_CONCURRENT_IMAGES=${MAX_CONCURRENT_IMAGES:-3}
+
+    # Run batch processing on startup
+    command: python photo_editor.py batch /data/input --output-dir /data/output --max-concurrent 3
+
+    restart: no
+
+# Networks
+networks:
+  default:
+    name: photo-editor-network

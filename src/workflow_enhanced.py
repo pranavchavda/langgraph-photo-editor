@@ -8,18 +8,22 @@ from pathlib import Path
 import operator
 import asyncio
 import os
+import subprocess
 
 from langgraph.func import entrypoint, task
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.config import get_stream_writer
+from .quality_config import get_quality_settings, save_with_quality, convert_for_api
+from .format_preservation import preserve_original_format, check_resolution_preserved, get_file_size_comparison
 
 from .agents_enhanced import (
     enhanced_analysis_agent,
     gemini_edit_agent,
-    imagemagick_optimization_agent, 
+    imagemagick_optimization_agent,
     background_removal_agent,
     enhanced_qc_agent,
-    AgentError
+    AgentError,
+    get_imagemagick_command
 )
 
 # Import lens correction module
@@ -49,12 +53,27 @@ def finalize_output_with_quality_and_cleanup(
     Rename final output based on quality and clean up intermediate files
     """
     final_path = current_path
+    path_obj = Path(current_path)
+    
+    # Ensure correct extension for WebP files (fix AVIF extension issue)
+    # Check actual file format
+    correct_suffix = path_obj.suffix
+    try:
+        from PIL import Image
+        with Image.open(current_path) as img:
+            if img.format == 'WEBP' and path_obj.suffix.lower() != '.webp':
+                # File is WebP but has wrong extension (e.g., .avif)
+                correct_suffix = '.webp'
+                print(f"🔧 Fixing extension: {path_obj.suffix} → .webp")
+    except Exception:
+        # If we can't detect, assume WebP since that's our output format
+        if path_obj.suffix.lower() == '.avif':
+            correct_suffix = '.webp'
     
     # Add quality indicator for poor results (≤8)
     if not passed_qc or quality_score <= 8:
-        path_obj = Path(current_path)
         quality_suffix = f"-q{int(quality_score)}" if quality_score > 0 else "-qfail"
-        new_name = f"{path_obj.stem}{quality_suffix}{path_obj.suffix}"
+        new_name = f"{path_obj.stem}{quality_suffix}{correct_suffix}"
         final_path = str(path_obj.parent / new_name)
         
         # Rename the file
@@ -64,6 +83,27 @@ def finalize_output_with_quality_and_cleanup(
             print(f"📝 Renamed to indicate quality: {Path(final_path).name}")
         except Exception as e:
             print(f"⚠️ Failed to rename for quality indicator: {e}")
+            # Still fix extension even if quality rename fails
+            if correct_suffix != path_obj.suffix:
+                new_name = f"{path_obj.stem}{correct_suffix}"
+                final_path = str(path_obj.parent / new_name)
+                try:
+                    shutil.move(current_path, final_path)
+                    print(f"🔧 Fixed extension: {Path(final_path).name}")
+                except:
+                    final_path = current_path
+            else:
+                final_path = current_path
+    elif correct_suffix != path_obj.suffix:
+        # Just fix the extension even if quality is good
+        new_name = f"{path_obj.stem}{correct_suffix}"
+        final_path = str(path_obj.parent / new_name)
+        try:
+            import shutil
+            shutil.move(current_path, final_path)
+            print(f"🔧 Fixed extension: {Path(final_path).name}")
+        except Exception as e:
+            print(f"⚠️ Failed to fix extension: {e}")
             final_path = current_path
     
     # Clean up intermediate files
@@ -188,12 +228,16 @@ async def enhanced_agentic_processor(
     🤖 Enhanced 5-Agent Photo Processing Workflow
     
     New Workflow Stages:
-1. 📊 Analysis Agent (Claude Sonnet 4) - Determines optimal editing strategy
-2. 🔍 Lens Correction Agent - Applies lens corrections using lensfunpy or ImageMagick fallback
-3. 🧠 Background Removal Agent - Applies background removal using advanced segmentation
-4. 🎨 Gemini Edit Agent - Uses Gemini 2.5 Flash Image for complex AI-powered editing
-5. 🛠️ ImageMagick Agent - Traditional image processing for simple optimizations
-6. ✅ QC Agent - Quality control and final evaluation
+1. 🖼️ Background Removal (if enabled) - Removes background FIRST before any analysis
+2. 📊 Analysis Agent (Claude Sonnet 4) - Analyzes the cleaned image and determines strategy
+3. ✂️ Trim - Removes excess whitespace/borders (if needed)
+4. 📐 Smart Cropping - Improves composition (if needed)
+5. 🔧 Defect Detection & Repair - Removes dust/scratches (if enabled)
+6. 🔍 Lens Correction - Applies lens corrections using lensfunpy or ImageMagick
+7. 🎨 Gemini Edit Agent - Uses Gemini 2.5 Flash Image for complex AI-powered editing
+8. 🛠️ ImageMagick Agent - Traditional image processing for simple optimizations
+9. ✅ QC Agent - Quality control and final evaluation
+10. 🔄 ImageMagick Fallback - Additional optimization if QC suggests it
     """
     
     writer = get_stream_writer()
@@ -215,12 +259,67 @@ async def enhanced_agentic_processor(
         # Check if ImageMagick is disabled by user
         skip_imagemagick = os.getenv("SKIP_IMAGEMAGICK", "false").lower() == "true"
         
-        # 🔍 Stage 1: Enhanced Analysis
+        # Track intermediate files for cleanup
+        intermediate_files = []
+        
+        # Initialize current_image to track the working image path
+        current_image = image_path
+        
+        # Convert AVIF to WebP if needed (Claude doesn't support AVIF)
+        if Path(image_path).suffix.lower() == '.avif':
+            from PIL import Image
+            import tempfile
+            
+            writer({
+                "stage": "avif_conversion",
+                "message": "Converting AVIF to WebP for processing"
+            })
+            
+            try:
+                with Image.open(image_path) as img:
+                    # Create WebP in same directory as original with proper .webp extension
+                    # Remove .avif and add .webp
+                    webp_path = Path(image_path).parent / f"{Path(image_path).stem}.webp"
+                    quality_settings = get_quality_settings()
+                    save_with_quality(img, str(webp_path), source_format='WEBP', settings=quality_settings)
+                    current_image = str(webp_path)
+                    intermediate_files.append(str(webp_path))
+                    print(f"🔄 Converted AVIF to WebP: {webp_path.name}")
+            except Exception as e:
+                writer({
+                    "stage": "avif_conversion_failed",
+                    "message": f"Failed to convert AVIF: {e}"
+                })
+                raise AgentError(f"Cannot process AVIF file: {e}")
+        
+        # 🖼️ Stage 1: Background Removal FIRST (if enabled by user - BEFORE analysis)
+        skip_background_removal = os.getenv("SKIP_BACKGROUND_REMOVAL", "false").lower() == "true"
+        
+        if not skip_background_removal:
+            writer({
+                "stage": "background_removal",
+                "message": "Removing background as first step (before analysis)"
+            })
+            print(f"🖼️ Removing background FIRST from: {current_image}")
+            
+            # Simple analysis just for background removal - no complex analysis yet
+            bg_analysis = {"remove_background": True}  # Force it since user enabled it
+            bg_removed = await run_background_agent(current_image, bg_analysis)
+
+            if bg_removed != current_image:
+                current_image = bg_removed
+                intermediate_files.append(bg_removed)
+                writer({
+                    "stage": "background_removed",
+                    "message": "Background removed successfully"
+                })
+        
+        # 🔍 Stage 2: Enhanced Analysis (on BG-removed image if applicable)
         writer({
             "stage": "analysis",
-            "message": "Analyzing image and determining optimal editing strategy"
+            "message": f"Analyzing {'background-removed ' if not skip_background_removal else ''}image and determining optimal editing strategy"
         })
-        analysis = await run_enhanced_analysis_agent(image_path, custom_instructions)
+        analysis = await run_enhanced_analysis_agent(current_image, custom_instructions)
         editing_strategy = analysis.get("editing_strategy", "imagemagick")
         
         # Override strategy if ImageMagick is disabled
@@ -237,13 +336,59 @@ async def enhanced_agentic_processor(
             "message": f"Analysis complete - Strategy: {editing_strategy}"
         })
         
-        # Track intermediate files for cleanup
-        intermediate_files = []
+        # ✂️ Stage 3: Trimming (if needed - after background removal)
+        needs_trim = analysis.get("needs_trim", False)
+        if custom_instructions and "trim" in custom_instructions.lower():
+            needs_trim = True
+            
+        if needs_trim:
+            writer({
+                "stage": "trimming",
+                "message": "Trimming excess whitespace from image"
+            })
+            
+            # Use ImageMagick trim command
+            trim_cmd = get_imagemagick_command()
+            if trim_cmd:
+                try:
+                    output_path = Path(current_image).parent / f"{Path(current_image).stem}-trimmed{Path(current_image).suffix}"
+
+                    # Log input size
+                    input_size = os.path.getsize(current_image)
+                    print(f"📐 Before trim: {input_size / 1024 / 1024:.1f} MB")
+
+                    # Get quality settings
+                    quality_settings = get_quality_settings()
+                    quality_value = quality_settings.get('imagemagick_quality', 95)
+
+                    # Use -fuzz to handle near-white/transparent pixels
+                    # IMPORTANT: Add -quality to preserve quality during trim
+                    trim_command = f"{trim_cmd} '{current_image}' -trim -fuzz 5% -quality {quality_value} '{output_path}'"
+                    print(f"🔧 Trim command: {trim_command}")
+                    result = subprocess.run(trim_command, shell=True, capture_output=True, text=True)
+
+                    if result.returncode == 0 and output_path.exists():
+                        output_size = os.path.getsize(output_path)
+                        print(f"📐 After trim: {output_size / 1024 / 1024:.1f} MB")
+
+                        current_image = str(output_path)
+                        intermediate_files.append(str(output_path))
+                        writer({
+                            "stage": "trim_complete",
+                            "message": f"Image trimmed successfully ({output_size / 1024 / 1024:.1f} MB)"
+                        })
+                    else:
+                        writer({
+                            "stage": "trim_failed",
+                            "message": f"Trim failed: {result.stderr}"
+                        })
+                except Exception as e:
+                    writer({
+                        "stage": "trim_failed",
+                        "message": f"Trim error: {str(e)}"
+                    })
         
-        # Initialize current_image to track the working image path
-        current_image = image_path
-        
-        # ✂️ Stage 2: Smart Cropping (if needed)
+        # ✂️ Stage 4: Smart Cropping (if needed - now after BG removal and trim)
         if smart_crop_agent and analysis.get("needs_cropping", False):
             writer({
                 "stage": "smart_cropping",
@@ -264,7 +409,7 @@ async def enhanced_agentic_processor(
                     "message": f"Cropping failed, continuing: {str(e)}"
                 })
         
-        # 🔍 Stage 3: Defect Detection and Repair (NEW)
+        # 🔍 Stage 5: Defect Detection and Repair
         # Check if repair is enabled and not already processed
         skip_repair = os.getenv("SKIP_REPAIR", "false").lower() == "true"
         
@@ -375,7 +520,7 @@ async def enhanced_agentic_processor(
             else:
                 print(f"   ℹ️ DEFECT REPAIR COMPLETED - No repairs applied")
         
-        # 🔍 Stage 4: Lens Correction (if needed)
+        # 🔍 Stage 6: Lens Correction (if needed)
         # Check if lens corrections were already applied in Streamlit or disabled by user
         already_corrected = "lens-corrected" in image_path or "corrected_" in image_path
         skip_lens_correction = os.getenv("SKIP_LENS_CORRECTION", "false").lower() == "true"
@@ -404,24 +549,32 @@ async def enhanced_agentic_processor(
                 "message": "Lens corrections disabled by user"
             })
         
-        # Skip background removal initially - do it after Gemini editing
-        # This ensures lens correction is applied to the original image first
+        # 🎨 Stage 7: Gemini Editing (if strategy includes it)
         gemini_edited_path = None
         
-        # 🎨 Stage 4: Gemini Editing (if strategy includes it)
-        gemini_edited_path = None
         if editing_strategy in ["gemini", "both"]:
             writer({
                 "stage": "gemini_editing",
                 "message": "Applying advanced AI editing with Gemini 2.5 Flash Image"
             })
+            
+            # Add flag to analysis if background was removed (helps Gemini agent know)
+            if not skip_background_removal:
+                analysis["background_was_removed"] = True
+            
             try:
                 gemini_edited_path = await run_gemini_edit_agent(current_image, analysis)
+                print(f"🎨 DEBUG: Gemini returned path: {gemini_edited_path}")
+                print(f"🎨 DEBUG: File exists: {os.path.exists(gemini_edited_path)}")
+                if os.path.exists(gemini_edited_path):
+                    file_size = os.path.getsize(gemini_edited_path)
+                    print(f"🎨 DEBUG: File size: {file_size} bytes")
                 current_image = gemini_edited_path
                 
                 writer({
                     "stage": "gemini_complete",
-                    "message": "Gemini editing completed successfully"
+                    "message": "Gemini editing completed successfully",
+                    "gemini_output": gemini_edited_path
                 })
             except AgentError as e:
                 writer({
@@ -431,7 +584,7 @@ async def enhanced_agentic_processor(
                 # Force ImageMagick fallback
                 editing_strategy = "imagemagick"
         
-        # ⚡ Stage 5: ImageMagick Optimization (only if Gemini wasn't used and not skipped by user)
+        # ⚡ Stage 8: ImageMagick Optimization (only if Gemini wasn't used and not skipped by user)
         imagemagick_optimized_path = None
         
         if skip_imagemagick:
@@ -456,33 +609,16 @@ async def enhanced_agentic_processor(
                 "message": "Skipping ImageMagick - Gemini already handled complex processing"
             })
         
-        # 🖼️ Stage 4.5: Background Removal (after Gemini editing)
-        # Check if background removal is enabled by user (not just analysis suggestion)
-        skip_background_removal = os.getenv("SKIP_BACKGROUND_REMOVAL", "false").lower() == "true"
-        if not skip_background_removal and analysis.get("remove_background", False):
-            writer({
-                "stage": "background_removal_final",
-                "message": "Removing background from enhanced image"
-            })
-            bg_removed_final = await run_background_agent(current_image, analysis)
-            if bg_removed_final != current_image:
-                # Track the intermediate PNG and WebP files created by background removal
-                png_file = str(Path(current_image).parent / f"{Path(current_image).stem}-no-bg.png")
-                webp_file = str(Path(current_image).parent / f"{Path(current_image).stem}-no-bg.webp")
-                if os.path.exists(png_file):
-                    intermediate_files.append(png_file)
-                if os.path.exists(webp_file) and webp_file != bg_removed_final:
-                    intermediate_files.append(webp_file)
-            current_image = bg_removed_final
+        # Background removal already done at the beginning if enabled
         
-        # ✅ Stage 5: Enhanced Quality Control
+        # ✅ Stage 9: Enhanced Quality Control
         writer({
             "stage": "quality_control",
             "message": "Performing enhanced quality control check"
         })
         qc_result = await run_enhanced_qc_agent(current_image, analysis)
         
-        # 🔄 Stage 6: ImageMagick Fallback Decision
+        # 🔄 Stage 10: ImageMagick Fallback Decision
         final_image_path = current_image
         
         # Skip ImageMagick fallback if Gemini was specifically chosen and used or if ImageMagick is disabled
@@ -520,6 +656,29 @@ async def enhanced_agentic_processor(
                     "message": f"ImageMagick fallback failed: {e}"
                 })
         
+        # 🔄 Format Preservation (convert back to original format if needed)
+        if get_quality_settings().get("preserve_original_format", False):
+            writer({
+                "stage": "format_preservation",
+                "message": "Converting back to original format"
+            })
+            final_image_path = preserve_original_format(final_image_path, image_path)
+
+        # 📊 Resolution and Size Check
+        resolution_ok, resolution_msg = check_resolution_preserved(image_path, final_image_path)
+        size_comparison = get_file_size_comparison(image_path, final_image_path)
+
+        if not resolution_ok:
+            writer({
+                "stage": "resolution_warning",
+                "message": resolution_msg
+            })
+
+        writer({
+            "stage": "size_comparison",
+            "message": size_comparison
+        })
+
         # 🎯 Final Results
         final_quality = qc_result.get("quality_score", 0)
         passed_qc = qc_result.get("passed", False)
@@ -562,6 +721,9 @@ async def enhanced_agentic_processor(
             final_image_path = finalize_output_with_quality_and_cleanup(
                 final_image_path, final_quality, intermediate_files, passed_qc
             )
+            
+            print(f"✅ DEBUG: Final image path being returned: {final_image_path}")
+            print(f"✅ DEBUG: Final image exists: {os.path.exists(final_image_path)}")
             
             writer({
                 "workflow": "enhanced_success",
@@ -778,7 +940,7 @@ async def process_image_batch_enhanced(
     output_dir: Optional[str] = None,
     max_concurrent: int = 3,
     custom_instructions: Optional[str] = None,
-    pattern: str = "*.{jpg,jpeg,png,webp}",
+    pattern: str = "*.{jpg,jpeg,png,webp,avif}",
     use_batch_consistency: bool = True
 ) -> Dict[str, Any]:
     """Process multiple images with the enhanced workflow and optional batch consistency"""
@@ -789,7 +951,7 @@ async def process_image_batch_enhanced(
     
     # Find all matching images
     image_files = []
-    for ext in ['jpg', 'jpeg', 'png', 'webp']:
+    for ext in ['jpg', 'jpeg', 'png', 'webp', 'avif']:
         image_files.extend(list(input_path.glob(f"*.{ext}")))
         image_files.extend(list(input_path.glob(f"*.{ext.upper()}")))
     

@@ -23,20 +23,20 @@ class BatchProfile:
     avg_brightness: float
     target_brightness: float
     brightness_adjustment: str  # ImageMagick command
-    
+
     # Color balance
     avg_saturation: float
     target_saturation: float
     color_correction: str
-    
+
     # Style consistency
     enhancement_level: str  # "subtle", "moderate", "strong"
     sharpness_level: float
-    
+
     # Common issues across batch
     common_problems: List[str]
     lighting_style: str  # "studio", "natural", "mixed"
-    
+
     # Gemini instructions template
     gemini_template: str
     imagemagick_base: str
@@ -48,17 +48,17 @@ async def analyze_batch_consistency(
 ) -> BatchProfile:
     """
     Analyze all images in batch to determine consistent processing parameters
-    
+
     This runs BEFORE individual processing to establish baseline consistency
     """
     client = AsyncAnthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
-    
+
     # Sample up to 5 representative images for batch analysis
     sample_size = min(5, len(image_paths))
     sample_paths = image_paths[:sample_size] if sample_size < 5 else [
         image_paths[i * len(image_paths) // sample_size] for i in range(sample_size)
     ]
-    
+
     # Create composite preview for batch analysis
     thumbnails = []
     for path in sample_paths:
@@ -66,13 +66,13 @@ async def analyze_batch_consistency(
         # Create small thumbnail for batch preview
         img.thumbnail((400, 400), Image.Resampling.LANCZOS)
         thumbnails.append(img)
-    
+
     # Create grid of thumbnails
     grid_width = min(3, len(thumbnails))
     grid_height = (len(thumbnails) + grid_width - 1) // grid_width
     grid_size = (grid_width * 400, grid_height * 400)
     grid = Image.new('RGB', grid_size, (255, 255, 255))
-    
+
     for i, thumb in enumerate(thumbnails):
         x = (i % grid_width) * 400
         y = (i // grid_width) * 400
@@ -80,27 +80,27 @@ async def analyze_batch_consistency(
         x_offset = (400 - thumb.width) // 2
         y_offset = (400 - thumb.height) // 2
         grid.paste(thumb, (x + x_offset, y + y_offset))
-    
+
     # Convert grid to base64
     buffer = BytesIO()
     grid.save(buffer, format='JPEG', quality=85)
     grid_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
-    
+
     # Analyze batch for consistency
     batch_prompt = f"""
     Analyze this batch of {len(image_paths)} product images (showing {sample_size} samples).
-    
+
     Your goal is to establish CONSISTENT processing parameters for the entire batch.
-    
+
     {f"User requirements: {custom_instructions}" if custom_instructions else ""}
-    
+
     Analyze:
     1. Overall brightness/exposure levels - what's the average and target?
     2. Color consistency - do they have similar white balance? saturation?
     3. Common issues across all images (dust, reflections, etc.)
     4. Lighting style (studio, natural, mixed)
     5. Product types and materials
-    
+
     Return a JSON object with:
     {{
         "brightness_analysis": {{
@@ -125,16 +125,16 @@ async def analyze_batch_consistency(
             "gemini_focus": "enhance product details while maintaining consistency"
         }}
     }}
-    
-    IMPORTANT: 
+
+    IMPORTANT:
     1. Prioritize CONSISTENCY across the batch over individual perfection
     2. Return ONLY the JSON object, no additional text or explanation
     3. Ensure the JSON is valid and complete
     """
-    
+
     try:
         response = await client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+            model="claude-4-sonnet-20250514",
             max_tokens=1500,
             messages=[{
                 "role": "user",
@@ -151,10 +151,10 @@ async def analyze_batch_consistency(
                 ]
             }]
         )
-        
+
         # Parse response
         text = response.content[0].text.strip()
-        
+
         # Extract JSON from various formats
         if "```json" in text:
             text = text.split("```json")[1].split("```")[0].strip()
@@ -175,35 +175,35 @@ async def analyze_batch_consistency(
                         end = i + 1
                         break
             text = text[start:end]
-        
+
         # Clean up any trailing commas or extra data
         text = text.strip()
         if text.endswith(","):
             text = text[:-1]
-        
+
         try:
             analysis = json.loads(text)
         except json.JSONDecodeError as e:
             print(f"⚠️ JSON parse error: {e}")
             print(f"  Attempted to parse: {text[:200]}...")
             raise
-        
+
         # Build consistent processing profile
         brightness_adj = analysis['brightness_analysis'].get('adjustment', '0')
         try:
             brightness_val = int(brightness_adj.replace('+', '').replace(' ', '').split('to')[0])
         except:
             brightness_val = 0
-        
+
         # Conservative ImageMagick base command for consistency
         imagemagick_base = analysis['recommended_approach'].get(
             'imagemagick_base',
             f'-brightness-contrast {brightness_val}x2 -modulate 100,102,100'
         )
-        
+
         # Ensure commands are within safe limits
         imagemagick_base = imagemagick_base.replace('-normalize', '').replace('-auto-level', '')
-        
+
         # Build Gemini template for consistency
         gemini_template = f"""
         Process this image as part of a batch with these consistency requirements:
@@ -211,13 +211,13 @@ async def analyze_batch_consistency(
         - Enhancement level: {analysis['recommended_approach']['enhancement_level']}
         - Focus areas: {analysis['recommended_approach'].get('gemini_focus', 'product details')}
         - Maintain consistency with: {analysis['color_analysis']['white_balance']} white balance
-        
+
         Common batch issues to address: {', '.join(analysis.get('common_issues', []))}
-        
+
         IMPORTANT: Maintain visual consistency with other images in the batch.
         Apply similar enhancement levels and color grading.
         """
-        
+
         return BatchProfile(
             avg_brightness=0.5,  # Normalized value
             target_brightness=0.5 + (brightness_val * 0.05),
@@ -232,7 +232,7 @@ async def analyze_batch_consistency(
             gemini_template=gemini_template.strip(),
             imagemagick_base=imagemagick_base
         )
-        
+
     except Exception as e:
         print(f"⚠️ Batch analysis failed: {e}, using defaults")
         # Return conservative defaults
@@ -264,22 +264,22 @@ def apply_batch_profile_to_analysis(
         # Blend individual needs with batch consistency
         # Start with batch base command
         individual_analysis['imagemagick_command'] = batch_profile.imagemagick_base
-        
+
         # Add individual-specific adjustments only if critical
         if 'critical_issues' in individual_analysis:
             # Allow some individual adjustment but keep it minimal
             pass
-    
+
     # Update Gemini instructions with batch template
     if 'gemini_instructions' in individual_analysis:
         individual_analysis['gemini_instructions'] = (
             batch_profile.gemini_template + "\n\n" +
             "Specific to this image: " + individual_analysis.get('gemini_instructions', '')
         )
-    
+
     # Ensure enhancement level matches batch
     individual_analysis['enhancement_level'] = batch_profile.enhancement_level
-    
+
     # Add batch context
     individual_analysis['batch_context'] = {
         'lighting_style': batch_profile.lighting_style,
@@ -287,7 +287,7 @@ def apply_batch_profile_to_analysis(
         'enhancement_level': batch_profile.enhancement_level,
         'common_problems': batch_profile.common_problems
     }
-    
+
     return individual_analysis
 
 
@@ -301,28 +301,28 @@ async def process_batch_with_consistency(
     Process batch with consistency analysis first
     """
     from .workflow_enhanced import process_single_image_enhanced
-    
+
     print("🔍 Analyzing batch for consistency...")
-    
+
     # Step 1: Analyze batch for consistency
     batch_profile = await analyze_batch_consistency(image_paths, custom_instructions)
-    
+
     print(f"📊 Batch Profile:")
     print(f"  - Enhancement: {batch_profile.enhancement_level}")
     print(f"  - Brightness adj: {batch_profile.brightness_adjustment}")
     print(f"  - Lighting: {batch_profile.lighting_style}")
     print(f"  - Base command: {batch_profile.imagemagick_base}")
-    
+
     # Step 2: Process images with consistent parameters
     semaphore = asyncio.Semaphore(max_concurrent)
-    
+
     async def process_with_profile(image_path: str) -> Dict[str, Any]:
         async with semaphore:
             # Set environment variable to pass batch profile
             os.environ['BATCH_IMAGEMAGICK_BASE'] = batch_profile.imagemagick_base
             os.environ['BATCH_GEMINI_TEMPLATE'] = batch_profile.gemini_template
             os.environ['BATCH_ENHANCEMENT_LEVEL'] = batch_profile.enhancement_level
-            
+
             try:
                 result = await process_single_image_enhanced(
                     image_path,
@@ -336,15 +336,15 @@ async def process_batch_with_consistency(
                 os.environ.pop('BATCH_IMAGEMAGICK_BASE', None)
                 os.environ.pop('BATCH_GEMINI_TEMPLATE', None)
                 os.environ.pop('BATCH_ENHANCEMENT_LEVEL', None)
-    
+
     # Process all images
     tasks = [process_with_profile(str(path)) for path in image_paths]
     results = await asyncio.gather(*tasks, return_exceptions=True)
-    
+
     # Compile results
     successful = sum(1 for r in results if isinstance(r, dict) and r.get("qc_passed", False))
     failed = len(results) - successful
-    
+
     return {
         "total_images": len(image_paths),
         "successful": successful,

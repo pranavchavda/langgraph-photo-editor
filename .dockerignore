@@ -1,0 +1,67 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+.DS_Store
+
+# Project specific
+input/
+output/
+processed/
+*.jpg
+*.jpeg
+*.png
+*.webp
+*.avif
+!test*.jpg
+!test*.png
+!logo.jpeg
+
+# Electron
+electron/
+dist-electron/
+node_modules/
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+!README.md
+!CLAUDE.md
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.log
+
+# Environment
+.env.local
+.env.*.local
+
+# Test files
+test_*.py
+debug_*.py
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# OS files
+Thumbs.db
