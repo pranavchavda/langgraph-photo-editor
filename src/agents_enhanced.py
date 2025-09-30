@@ -1681,153 +1681,18 @@ async def background_removal_agent(image_path: str, analysis: Dict[str, Any]) ->
                     "message": f"Background removal complete (rembg), conversion failed: {convert_error}"
                 })
                 return png_path
-
-        except ImportError as e:
-            error_msg = f"rembg not installed or import error: {str(e)}"
-            print(f"❌ DEBUG: {error_msg}")
-            print(f"❌ SOLUTION: Make sure you're running with the virtual environment activated:")
-            print(f"             ./venv/bin/streamlit run streamlit_app.py")
-            print(f"             OR activate venv first: source venv/bin/activate")
-
-            # Only fallback to remove.bg if we're in auto mode (not explicitly chosen)
-            original_method = os.getenv("BACKGROUND_REMOVAL_METHOD", "auto").lower()
-            if original_method == "auto":
-                writer({
-                    "agent": "background",
-                    "status": "warning",
-                    "message": "rembg not installed, falling back to remove.bg API"
-                })
-                method = "remove.bg"  # Fallback to API
-            else:
-                # User explicitly chose rembg, don't fallback
-                writer({
-                    "agent": "background",
-                    "status": "error",
-                    "message": "rembg not installed. Run: pip install rembg (in venv)"
-                })
-                return image_path
-        except Exception as e:
-            error_msg = f"rembg background removal error: {str(e)}"
-            print(f"❌ DEBUG: {error_msg}")
-            import traceback
-            print(f"❌ DEBUG: Full traceback:\n{traceback.format_exc()}")
-
-            # Only fallback to remove.bg if we're in auto mode
-            original_method = os.getenv("BACKGROUND_REMOVAL_METHOD", "auto").lower()
-            if original_method == "auto":
-                writer({
-                    "agent": "background",
-                    "status": "error",
-                    "message": f"rembg failed: {str(e)}, trying remove.bg API"
-                })
-                method = "remove.bg"  # Fallback to API
-            else:
-                # User explicitly chose rembg, don't fallback
-                writer({
-                    "agent": "background",
-                    "status": "error",
-                    "message": f"rembg failed: {str(e)}"
-                })
-                return image_path
-
-    if method == "remove.bg":
-        # Use remove.bg API
-        api_key = os.getenv("REMOVE_BG_API_KEY")
-        if not api_key:
-            writer({
-                "agent": "background",
-                "status": "skipped",
-                "message": "Background removal skipped - no remove.bg API key"
-            })
+        else:
+            error_msg = f"Background removal failed: HTTP {response.status_code}"
+            writer({"agent": "background", "status": "error", "message": error_msg})
             return image_path
 
+    except Exception as e:
         writer({
             "agent": "background",
-            "status": "removing",
-            "message": "Removing background with remove.bg API"
+            "status": "error",
+            "message": f"Background removal error: {str(e)}"
         })
-
-        try:
-            with open(image_path, 'rb') as image_file:
-                response = requests.post(
-                    'https://api.remove.bg/v1.0/removebg',
-                    files={'image_file': image_file},
-                data={'size': 'auto'},
-                headers={'X-Api-Key': api_key},
-                timeout=30
-                )
-
-            if response.status_code == 200:
-                # Step 1: Save as PNG (native format from remove.bg)
-                png_path = str(Path(image_path).parent / f"{Path(image_path).stem}-no-bg.png")
-                with open(png_path, 'wb') as out_file:
-                    out_file.write(response.content)
-
-                writer({
-                    "agent": "background",
-                    "status": "converting",
-                    "message": "Converting PNG to WebP for further processing"
-                })
-
-                # Step 2: Convert PNG to WebP using ImageMagick
-                webp_path = str(Path(image_path).parent / f"{Path(image_path).stem}-no-bg.webp")
-                try:
-                    import subprocess
-                    magick_cmd = get_imagemagick_command()
-
-                    # If ImageMagick not available, just use the PNG
-                    if not magick_cmd:
-                        # Return PNG directly (Streamlit can display PNGs too)
-                        webp_path = png_path  # Just use the PNG path
-                        result_ok = True
-                    else:
-                        cmd = [magick_cmd, png_path, "-quality", "95", webp_path]
-                        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-                        result_ok = (result.returncode == 0)
-
-                        if not result_ok:
-                            # Fallback to PNG if conversion fails
-                            webp_path = png_path
-                            result_ok = True
-
-                    if result_ok:
-                        writer({
-                            "agent": "background",
-                            "status": "complete",
-                            "output": webp_path,
-                            "message": f"Background removal and conversion complete: {Path(webp_path).name}"
-                        })
-                        return webp_path
-                    else:
-                        # If conversion fails, return the PNG path
-                        writer({
-                            "agent": "background",
-                            "status": "warning",
-                            "output": png_path,
-                            "message": f"Background removal complete, WebP conversion failed - using PNG: {Path(png_path).name}"
-                        })
-                        return png_path
-
-                except Exception as convert_error:
-                    writer({
-                        "agent": "background",
-                        "status": "warning",
-                        "output": png_path,
-                        "message": f"Background removal complete, conversion failed: {convert_error} - using PNG"
-                    })
-                    return png_path
-            else:
-                error_msg = f"Background removal failed: HTTP {response.status_code}"
-                writer({"agent": "background", "status": "error", "message": error_msg})
-                return image_path  # Return original if background removal fails
-
-        except Exception as e:
-            writer({
-                "agent": "background",
-                "status": "error",
-                "message": f"Background removal error: {str(e)}"
-            })
-            return image_path  # Return original if fails
+        return image_path
 
 
 async def enhanced_qc_agent(image_path: str, original_analysis: Dict[str, Any]) -> Dict[str, Any]:
