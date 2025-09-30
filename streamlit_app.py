@@ -330,6 +330,35 @@ with st.sidebar:
 
     remove_background = st.checkbox("Remove Background", value=True)
 
+    # Background removal method selector (show when enabled)
+    bg_method = "Auto (Smart Selection)"  # Default
+    rembg_model = "bria-rmbg"  # Default
+    use_alpha_matting = False  # Default
+
+    if remove_background:
+        bg_method = st.selectbox(
+            "Background Removal Method",
+            options=["Auto (Smart Selection)", "rembg (Local)", "remove.bg (API)"],
+            index=0,
+            help="Auto: Uses remove.bg if API key available, otherwise rembg. rembg: Free local processing. remove.bg: Cloud API"
+        )
+
+        # Show model selector for rembg (shown for Auto and rembg options)
+        if bg_method in ["Auto (Smart Selection)", "rembg (Local)"]:
+            rembg_model = st.selectbox(
+                "rembg Model",
+                options=["bria-rmbg", "u2net", "u2netp", "isnet-general-use", "u2net_human_seg"],
+                index=0,  # Default to bria-rmbg (best quality)
+                help="bria-rmbg: Best quality. u2net: Balanced. u2netp: Fast & lightweight"
+            )
+
+            # Alpha matting option
+            use_alpha_matting = st.checkbox(
+                "Enable Alpha Matting",
+                value=False,
+                help="Better edge quality but slower. Recommended for detailed objects and hair."
+            )
+
     st.subheader("🔄 Quality Control")
     skip_retries = st.checkbox(
         "Skip Quality Retries (Faster Processing)",
