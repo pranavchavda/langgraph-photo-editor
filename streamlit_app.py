@@ -327,10 +327,15 @@ with st.sidebar:
             step=10,
             help="Lower = only obvious defects, Higher = more aggressive detection"
         )
-    
-    use_defect_repair = st.checkbox("Auto Dust & Scratch Repair 🧹", value=False,
-                            help="Automatically detect and remove dust spots, sensor debris, and scratches from images.")
+
     remove_background = st.checkbox("Remove Background", value=True)
+
+    st.subheader("🔄 Quality Control")
+    skip_retries = st.checkbox(
+        "Skip Quality Retries (Faster Processing)",
+        value=False,
+        help="Disable automatic retries for faster results. Uncheck for best quality (may retry 2-3 times)."
+    )
     
     # ImageMagick Base Configuration Section
     st.subheader("🎛️ ImageMagick Base Settings")
@@ -1301,7 +1306,16 @@ elif mode == "📦 Batch Processing":
         
         if use_batch_consistency:
             st.info("📊 Batch consistency will analyze all images first to establish uniform processing parameters")
-        
+
+        # Quality control options
+        st.subheader("🔄 Quality Control")
+        skip_retries = st.checkbox(
+            "Skip Quality Retries (Faster Batch Processing)",
+            value=False,
+            key="batch_skip_retries",
+            help="Disable automatic retries for faster results. Uncheck for best quality (may retry 2-3 times per image)."
+        )
+
         # Base ImageMagick Configuration for Batch
         with st.expander("🎛️ Batch ImageMagick Base Configuration (Advanced)", expanded=False):
             st.markdown("Set consistent base settings for the entire batch. These values will be used for all images.")
