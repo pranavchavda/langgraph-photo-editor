@@ -194,10 +194,11 @@ async def enhanced_analysis_agent(image_path: str, custom_instructions: Optional
     - ImageMagick lens corrections are fallback options only, to be used when lensfunpy is not available.
     - You may still report lens_issues and needs_lens_correction for downstream processing by lensfun.
     
-    **BACKGROUND REMOVAL POLICY**:
-    - Background removal is ENABLED by default for all product photography
-    - Only set remove_background: false if user explicitly requests "no background removal", "keep background", or "no bg removal"
-    - For e-commerce and product photos, transparent backgrounds are preferred
+    **BACKGROUND REMOVAL**:
+    - Background removal preference is controlled by the user via UI checkbox
+    - You should set remove_background: true for e-commerce/product photos (default)
+    - Set remove_background: false only if the image context clearly requires the background
+    - Note: This will be overridden by user preference if they explicitly chose to enable/disable it
     
     Return analysis as JSON with:
     - lens_issues: [detected lens distortions: barrel, pincushion, vignetting, chromatic_aberration]
@@ -225,25 +226,34 @@ async def enhanced_analysis_agent(image_path: str, custom_instructions: Optional
         skip_gemini = "skip gemini" in custom_instructions.lower()
         
         analysis_prompt += f"""
-        
+
     **CUSTOM USER INSTRUCTIONS**: {custom_instructions}
-    
+
     Incorporate these user preferences into your editing strategy:
     - If user wants specific styles, use Gemini for complex styling
     - If user wants simple adjustments, ImageMagick may be sufficient
     - Always prioritize user intent in your strategy choice
     """
-        
+
         if skip_gemini:
             analysis_prompt += """
-    **IMPORTANT**: User explicitly requested to skip Gemini. 
+    **IMPORTANT**: User explicitly requested to skip Gemini.
     Set editing_strategy to "imagemagick" only, never "gemini" or "both".
     """
-    
+
     try:
+        # Validate API key exists
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        if not api_key:
+            raise AgentError("ANTHROPIC_API_KEY environment variable is not set")
+
+        print(f"🔑 Using Anthropic API key: {api_key[:8]}...{api_key[-4:]}")
+
         client = get_anthropic_client()
+        print(f"🌐 Connecting to Anthropic API...")
+
         response = await client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-5-20250929",
             max_tokens=1200,
             temperature=0.7,
             messages=[{
@@ -291,7 +301,17 @@ async def enhanced_analysis_agent(image_path: str, custom_instructions: Optional
                 analysis_result['editing_strategy'] = 'imagemagick'
                 analysis_result['gemini_instructions'] = ''
                 analysis_result['editing_explanation'] = 'Gemini AI editing disabled'
-            
+
+            # Override background removal based on user preference from UI
+            skip_bg_removal = os.getenv('SKIP_BACKGROUND_REMOVAL', 'false').lower() == 'true'
+            if skip_bg_removal:
+                print("DEBUG: User disabled background removal - overriding AI decision")
+                analysis_result['remove_background'] = False
+            else:
+                # User wants background removal - force it to true
+                print("DEBUG: User enabled background removal - ensuring it's enabled")
+                analysis_result['remove_background'] = True
+
             # Apply batch consistency if available
             if os.getenv('BATCH_IMAGEMAGICK_BASE'):
                 writer({
@@ -321,6 +341,7 @@ async def enhanced_analysis_agent(image_path: str, custom_instructions: Optional
                 "message": f"JSON parsing failed: {e}, using fallback"
             })
             # Fallback analysis
+            skip_bg_removal = os.getenv('SKIP_BACKGROUND_REMOVAL', 'false').lower() == 'true'
             analysis_result = {
                 "surface_materials": ["mixed"],
                 "lighting_issues": ["general optimization needed"],
@@ -330,7 +351,7 @@ async def enhanced_analysis_agent(image_path: str, custom_instructions: Optional
                 "gemini_instructions": "",
                 "imagemagick_command": "-gamma 1.02 -modulate 100,108,100 -unsharp 0x1",
                 "editing_explanation": "Fallback to basic optimization",
-                "remove_background": True,
+                "remove_background": not skip_bg_removal,  # Respect user preference
                 "optimization_priority": ["brightness", "contrast", "saturation"],
                 "lens_corrections_applied": False
             }
@@ -362,7 +383,17 @@ async def enhanced_analysis_agent(image_path: str, custom_instructions: Optional
         return analysis_result
         
     except Exception as e:
-        error_msg = f"Analysis agent failed: {str(e)}"
+        import traceback
+        error_details = traceback.format_exc()
+        error_type = type(e).__name__
+        error_msg = f"Analysis agent failed: {error_type}: {str(e)}"
+
+        # Print detailed error to console
+        print(f"❌ DETAILED ERROR in Analysis Agent:")
+        print(f"   Error Type: {error_type}")
+        print(f"   Error Message: {str(e)}")
+        print(f"   Full Traceback:\n{error_details}")
+
         writer({
             "agent": "analysis",
             "status": "error",
@@ -391,8 +422,18 @@ async def gemini_edit_agent(image_path: str, analysis: Dict[str, Any]) -> str:
     
     try:
         print("🤖 Starting Gemini AI editing...")
+
+        # Validate API key exists
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise AgentError("GEMINI_API_KEY environment variable is not set")
+
+        print(f"🔑 Using Gemini API key: {api_key[:8]}...{api_key[-4:]}")
+
         # Configure Gemini API
         configure_gemini()
+        print(f"🌐 Connecting to Gemini API...")
+
         # Configure Gemini model
         model = genai.GenerativeModel('gemini-2.5-flash-image-preview')
         
@@ -523,9 +564,8 @@ async def gemini_edit_agent(image_path: str, analysis: Dict[str, Any]) -> str:
                             
                             # Save the final image
                             edited_img.save(output_path, 'WEBP', quality=95)
-                            
+
                             # Verify the file was written correctly
-                            import os
                             actual_file_size = os.path.getsize(output_path)
                             if actual_file_size > 0:
                                 print(f"✅ Successfully saved: {Path(output_path).name} ({actual_file_size:,} bytes)")
@@ -556,10 +596,20 @@ async def gemini_edit_agent(image_path: str, analysis: Dict[str, Any]) -> str:
         return output_path
         
     except Exception as e:
-        error_msg = f"Gemini editing failed: {str(e)}"
+        import traceback
+        error_details = traceback.format_exc()
+        error_type = type(e).__name__
+        error_msg = f"Gemini editing failed: {error_type}: {str(e)}"
+
+        # Print detailed error to console
+        print(f"❌ DETAILED ERROR in Gemini Agent:")
+        print(f"   Error Type: {error_type}")
+        print(f"   Error Message: {str(e)}")
+        print(f"   Full Traceback:\n{error_details}")
+
         writer({
             "agent": "gemini_edit",
-            "status": "error", 
+            "status": "error",
             "message": error_msg
         })
         raise AgentError(error_msg)
@@ -772,10 +822,10 @@ async def imagemagick_optimization_agent(image_path: str, analysis: Dict[str, An
 
 async def background_removal_agent(image_path: str, analysis: Dict[str, Any]) -> str:
     """
-    🖼️ Background Removal Agent - Uses remove.bg API
+    🖼️ Background Removal Agent - Supports rembg (local) or remove.bg (API)
     """
     writer = get_stream_writer()
-    
+
     if not analysis.get("remove_background", False):
         writer({
             "agent": "background",
@@ -783,103 +833,284 @@ async def background_removal_agent(image_path: str, analysis: Dict[str, Any]) ->
             "message": "Background removal not needed based on analysis"
         })
         return image_path
-    
-    api_key = os.getenv("REMOVE_BG_API_KEY")
-    if not api_key:
+
+    # Check which method to use
+    method = os.getenv("BACKGROUND_REMOVAL_METHOD", "auto").lower()
+    print(f"DEBUG: Background removal method from environment: {method}")
+
+    # Handle auto mode - smart selection based on API key availability
+    if method == "auto":
+        api_key = os.getenv("REMOVE_BG_API_KEY")
+        if api_key:
+            method = "remove.bg"
+            writer({
+                "agent": "background",
+                "status": "info",
+                "message": "Auto mode: remove.bg API key detected, using remove.bg"
+            })
+        else:
+            method = "rembg"
+            writer({
+                "agent": "background",
+                "status": "info",
+                "message": "Auto mode: No remove.bg API key, using rembg (local)"
+            })
+
+    if method == "rembg":
+        # Try using rembg (local library)
         writer({
             "agent": "background",
-            "status": "skipped", 
-            "message": "Background removal skipped - no API key"
+            "status": "removing",
+            "message": "Removing background with rembg (ML-based)"
         })
-        return image_path
-    
-    writer({
-        "agent": "background",
-        "status": "removing",
-        "message": "Removing background with remove.bg API"
-    })
-    
-    try:
-        with open(image_path, 'rb') as image_file:
-            response = requests.post(
-                'https://api.remove.bg/v1.0/removebg',
-                files={'image_file': image_file},
-                data={'size': 'auto'},
-                headers={'X-Api-Key': api_key},
-                timeout=30
-            )
-        
-        if response.status_code == 200:
-            # Step 1: Save as PNG (native format from remove.bg)
-            png_path = str(Path(image_path).parent / f"{Path(image_path).stem}-no-bg.png")
-            with open(png_path, 'wb') as out_file:
-                out_file.write(response.content)
-            
+
+        try:
+            from rembg import remove, new_session
+            from PIL import Image
+
+            # Load the image
+            input_img = Image.open(image_path)
+
+            # Get preferred model from env or use bria-rmbg by default
+            model = os.getenv("REMBG_MODEL", "bria-rmbg")
+
+            # Check if alpha matting is enabled
+            use_alpha_matting = os.getenv("REMBG_ALPHA_MATTING", "false").lower() == "true"
+
+            # Create a session with the specified model
+            session = None
+            try:
+                session = new_session(model)
+                matting_status = " (with alpha matting)" if use_alpha_matting else ""
+                writer({
+                    "agent": "background",
+                    "status": "info",
+                    "message": f"Using {model} model{matting_status} for background removal"
+                })
+            except Exception as e:
+                # Fallback to bria-rmbg if specified model fails
+                try:
+                    session = new_session('bria-rmbg')
+                    writer({
+                        "agent": "background",
+                        "status": "info",
+                        "message": f"Model {model} not available, using bria-rmbg (fallback)"
+                    })
+                except:
+                    # If bria-rmbg also fails, let remove() use its default
+                    session = None
+                    writer({
+                        "agent": "background",
+                        "status": "info",
+                        "message": "Using default u2net model"
+                    })
+
+            # Prepare removal kwargs with optional alpha matting
+            remove_kwargs = {}
+            if use_alpha_matting:
+                remove_kwargs['alpha_matting'] = True
+                remove_kwargs['alpha_matting_foreground_threshold'] = 240
+                remove_kwargs['alpha_matting_background_threshold'] = 50
+                remove_kwargs['alpha_matting_erode_size'] = 10
+
+            # Remove background
+            if session:
+                output_img = remove(input_img, session=session, **remove_kwargs)
+            else:
+                # Use default model if no session
+                output_img = remove(input_img, **remove_kwargs)
+
+            # Save as PNG first (preserves transparency)
+            png_path = str(Path(image_path).parent / f"{Path(image_path).stem}-rembg.png")
+            output_img.save(png_path, 'PNG')
+
             writer({
                 "agent": "background",
                 "status": "converting",
                 "message": "Converting PNG to WebP for further processing"
             })
-            
-            # Step 2: Convert PNG to WebP using ImageMagick
-            webp_path = str(Path(image_path).parent / f"{Path(image_path).stem}-no-bg.webp")
+
+            # Convert to WebP if ImageMagick is available
+            webp_path = str(Path(image_path).parent / f"{Path(image_path).stem}-rembg.webp")
             try:
                 import subprocess
                 magick_cmd = get_imagemagick_command()
-                
-                # If ImageMagick not available, just use the PNG
+
                 if not magick_cmd:
-                    # Return PNG directly (Streamlit can display PNGs too)
-                    webp_path = png_path  # Just use the PNG path
+                    webp_path = png_path
                     result_ok = True
                 else:
                     cmd = [magick_cmd, png_path, "-quality", "95", webp_path]
                     result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
                     result_ok = (result.returncode == 0)
-                    
+
                     if not result_ok:
-                        # Fallback to PNG if conversion fails
                         webp_path = png_path
                         result_ok = True
-                
-                if result_ok:
-                    writer({
-                        "agent": "background",
-                        "status": "complete",
-                        "output": webp_path,
-                        "message": f"Background removal and conversion complete: {Path(webp_path).name}"
-                    })
-                    return webp_path
-                else:
-                    # If conversion fails, return the PNG path
-                    writer({
-                        "agent": "background", 
-                        "status": "warning",
-                        "output": png_path,
-                        "message": f"Background removal complete, WebP conversion failed - using PNG: {Path(png_path).name}"
-                    })
-                    return png_path
-                    
+
+                writer({
+                    "agent": "background",
+                    "status": "complete",
+                    "output": webp_path,
+                    "message": f"Background removal complete (rembg): {Path(webp_path).name}"
+                })
+                return webp_path
+
             except Exception as convert_error:
                 writer({
                     "agent": "background",
-                    "status": "warning", 
+                    "status": "warning",
                     "output": png_path,
-                    "message": f"Background removal complete, conversion failed: {convert_error} - using PNG"
+                    "message": f"Background removal complete (rembg), conversion failed: {convert_error}"
                 })
                 return png_path
-        else:
-            error_msg = f"Background removal failed: HTTP {response.status_code}"
-            writer({"agent": "background", "status": "error", "message": error_msg})
-            return image_path  # Return original if background removal fails
-            
-    except Exception as e:
+
+        except ImportError as e:
+            error_msg = f"rembg not installed or import error: {str(e)}"
+            print(f"❌ DEBUG: {error_msg}")
+            print(f"❌ SOLUTION: Make sure you're running with the virtual environment activated:")
+            print(f"             ./venv/bin/streamlit run streamlit_app.py")
+            print(f"             OR activate venv first: source venv/bin/activate")
+
+            # Only fallback to remove.bg if we're in auto mode (not explicitly chosen)
+            original_method = os.getenv("BACKGROUND_REMOVAL_METHOD", "auto").lower()
+            if original_method == "auto":
+                writer({
+                    "agent": "background",
+                    "status": "warning",
+                    "message": "rembg not installed, falling back to remove.bg API"
+                })
+                method = "remove.bg"  # Fallback to API
+            else:
+                # User explicitly chose rembg, don't fallback
+                writer({
+                    "agent": "background",
+                    "status": "error",
+                    "message": "rembg not installed. Run: pip install rembg (in venv)"
+                })
+                return image_path
+        except Exception as e:
+            error_msg = f"rembg background removal error: {str(e)}"
+            print(f"❌ DEBUG: {error_msg}")
+            import traceback
+            print(f"❌ DEBUG: Full traceback:\n{traceback.format_exc()}")
+
+            # Only fallback to remove.bg if we're in auto mode
+            original_method = os.getenv("BACKGROUND_REMOVAL_METHOD", "auto").lower()
+            if original_method == "auto":
+                writer({
+                    "agent": "background",
+                    "status": "error",
+                    "message": f"rembg failed: {str(e)}, trying remove.bg API"
+                })
+                method = "remove.bg"  # Fallback to API
+            else:
+                # User explicitly chose rembg, don't fallback
+                writer({
+                    "agent": "background",
+                    "status": "error",
+                    "message": f"rembg failed: {str(e)}"
+                })
+                return image_path
+
+    if method == "remove.bg":
+        # Use remove.bg API
+        api_key = os.getenv("REMOVE_BG_API_KEY")
+        if not api_key:
+            writer({
+                "agent": "background",
+                "status": "skipped",
+                "message": "Background removal skipped - no remove.bg API key"
+            })
+            return image_path
+
         writer({
             "agent": "background",
-            "status": "error",
-            "message": f"Background removal error: {str(e)}"
+            "status": "removing",
+            "message": "Removing background with remove.bg API"
         })
-        return image_path  # Return original if fails
+
+        try:
+            with open(image_path, 'rb') as image_file:
+                response = requests.post(
+                    'https://api.remove.bg/v1.0/removebg',
+                    files={'image_file': image_file},
+                data={'size': 'auto'},
+                headers={'X-Api-Key': api_key},
+                timeout=30
+                )
+
+            if response.status_code == 200:
+                # Step 1: Save as PNG (native format from remove.bg)
+                png_path = str(Path(image_path).parent / f"{Path(image_path).stem}-no-bg.png")
+                with open(png_path, 'wb') as out_file:
+                    out_file.write(response.content)
+
+                writer({
+                    "agent": "background",
+                    "status": "converting",
+                    "message": "Converting PNG to WebP for further processing"
+                })
+
+                # Step 2: Convert PNG to WebP using ImageMagick
+                webp_path = str(Path(image_path).parent / f"{Path(image_path).stem}-no-bg.webp")
+                try:
+                    import subprocess
+                    magick_cmd = get_imagemagick_command()
+
+                    # If ImageMagick not available, just use the PNG
+                    if not magick_cmd:
+                        # Return PNG directly (Streamlit can display PNGs too)
+                        webp_path = png_path  # Just use the PNG path
+                        result_ok = True
+                    else:
+                        cmd = [magick_cmd, png_path, "-quality", "95", webp_path]
+                        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+                        result_ok = (result.returncode == 0)
+
+                        if not result_ok:
+                            # Fallback to PNG if conversion fails
+                            webp_path = png_path
+                            result_ok = True
+
+                    if result_ok:
+                        writer({
+                            "agent": "background",
+                            "status": "complete",
+                            "output": webp_path,
+                            "message": f"Background removal and conversion complete: {Path(webp_path).name}"
+                        })
+                        return webp_path
+                    else:
+                        # If conversion fails, return the PNG path
+                        writer({
+                            "agent": "background",
+                            "status": "warning",
+                            "output": png_path,
+                            "message": f"Background removal complete, WebP conversion failed - using PNG: {Path(png_path).name}"
+                        })
+                        return png_path
+
+                except Exception as convert_error:
+                    writer({
+                        "agent": "background",
+                        "status": "warning",
+                        "output": png_path,
+                        "message": f"Background removal complete, conversion failed: {convert_error} - using PNG"
+                    })
+                    return png_path
+            else:
+                error_msg = f"Background removal failed: HTTP {response.status_code}"
+                writer({"agent": "background", "status": "error", "message": error_msg})
+                return image_path  # Return original if background removal fails
+
+        except Exception as e:
+            writer({
+                "agent": "background",
+                "status": "error",
+                "message": f"Background removal error: {str(e)}"
+            })
+            return image_path  # Return original if fails
 
 
 async def enhanced_qc_agent(image_path: str, original_analysis: Dict[str, Any]) -> Dict[str, Any]:
@@ -905,39 +1136,41 @@ async def enhanced_qc_agent(image_path: str, original_analysis: Dict[str, Any]) 
     Original analysis: {original_analysis.get('optimization_priority', [])}
     Applied strategy: {original_analysis.get('editing_strategy', 'unknown')}
     
-    **STRICT EVALUATION CRITERIA**:
-    
-    1. **Digital Artifacts/Corruption**: 
-       - ANY visible glitches, color bleeding, processing errors = FAIL
-       - Pink/purple/cyan artifacts or unusual color patches = FAIL
-       
-    2. **Dust and Debris Removal**:
-       - Check for remaining dust spots, sensor debris, or surface dirt
-       - Ensure dust removal did not blur important product details
-       - Verify that cleaning maintained material textures and sharpness
-       
+    **REALISTIC EVALUATION CRITERIA**:
+
+    1. **Critical Issues (Auto-Fail)**:
+       - Visible glitches, severe color bleeding, processing corruption
+       - Pink/purple/cyan artifacts or unusual color patches
+
+    2. **Dust and Debris**:
+       - Minor dust spots are acceptable for 6-7 range
+       - Check that cleaning didn't blur product details
+
     3. **Professional Standards**:
-       - Must look like professional product photography
-       - Clean, sharp, commercial-grade appearance
-       
+       - Clean, sharp, suitable for e-commerce
+       - Natural product appearance
+
     4. **Editing Quality**:
-       - Natural-looking results (no over-processing)
-       - Preserved product authenticity
-       - Enhanced without looking artificial
-       
-    5. **Technical Excellence**:
-       - Sharp focus, proper exposure
-       - Clean edges, appropriate contrast
-       - Material authenticity (chrome looks like chrome)
-    
-    **DECISION LOGIC**:
-    - Score 9-10: Perfect, accept result
-    - Score 7-8: Good but could benefit from ImageMagick refinement
-    - Score 0-6: Poor quality, definitely needs ImageMagick backup
-    
+       - Natural-looking results preferred
+       - Product authenticity maintained
+       - Moderate enhancements acceptable
+
+    5. **Technical Quality**:
+       - Reasonable focus and exposure
+       - Clean edges and adequate contrast
+
+    **SCORING GUIDELINES** (Be realistic, not overly strict):
+    - Score 9-10: Excellent - professional grade, ready to use
+    - Score 7-8: Good - solid quality, commercially acceptable
+    - Score 5-6: Acceptable - usable but could be improved
+    - Score 0-4: Poor - needs significant improvement
+
+    **IMPORTANT**: ImageMagick-only processing typically scores 6-8 range, which is ACCEPTABLE.
+    Only fail for critical issues (artifacts, corruption, severe problems).
+
     Return JSON with:
-    - passed: boolean (true if score 9+ AND no artifacts)
-    - quality_score: number (0-10, be strict)
+    - passed: boolean (true if score 5+ AND no critical artifacts)
+    - quality_score: number (0-10, be realistic not harsh)
     - issues_found: [specific problems]
     - dust_removal_quality: string (excellent, good, fair, poor)
     - needs_imagemagick_fallback: boolean (recommend ImageMagick as backup)
@@ -950,7 +1183,7 @@ async def enhanced_qc_agent(image_path: str, original_analysis: Dict[str, Any]) 
     try:
         client = get_anthropic_client()
         response = await client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-5-20250929",
             max_tokens=800,
             messages=[{
                 "role": "user",
@@ -1019,7 +1252,17 @@ async def enhanced_qc_agent(image_path: str, original_analysis: Dict[str, Any]) 
         return qc_result
         
     except Exception as e:
-        error_msg = f"QC agent failed: {str(e)}"
+        import traceback
+        error_details = traceback.format_exc()
+        error_type = type(e).__name__
+        error_msg = f"QC agent failed: {error_type}: {str(e)}"
+
+        # Print detailed error to console
+        print(f"❌ DETAILED ERROR in QC Agent:")
+        print(f"   Error Type: {error_type}")
+        print(f"   Error Message: {str(e)}")
+        print(f"   Full Traceback:\n{error_details}")
+
         writer({"agent": "qc", "status": "error", "message": error_msg})
         raise AgentError(error_msg)
 

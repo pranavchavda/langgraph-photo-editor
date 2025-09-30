@@ -118,7 +118,8 @@ REMOVE_BG_API_KEY=your_removebg_key_here      # Background removal
 # Processing settings (optional)
 MAX_CONCURRENT_IMAGES=3                        # Batch concurrency
 RETRY_ATTEMPTS=2                              # QC retry attempts
-QUALITY_THRESHOLD=0.8                         # Minimum QC score
+QUALITY_THRESHOLD=5.0                         # Minimum QC score (0-10 scale, 5=acceptable)
+SKIP_RETRIES=false                            # Set to true to disable retries for faster processing
 ```
 
 ## File I/O Patterns
