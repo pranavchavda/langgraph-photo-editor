@@ -882,17 +882,35 @@ if mode == "🖼️ Single Image":
             final_anthropic = st.session_state.api_keys.get('anthropic', '')
             final_gemini = st.session_state.api_keys.get('gemini', '')
             final_removebg = st.session_state.api_keys.get('removebg', '')
-            
+
             if not final_anthropic:
-                st.error("⚠️ Please enter your Anthropic API key in the sidebar")
+                st.error("⚠️ Please enter your Anthropic API key in the sidebar and click 'Save Keys'")
             elif use_gemini and not final_gemini:
-                st.error("⚠️ Please enter your Gemini API key in the sidebar")
+                st.error("⚠️ Please enter your Gemini API key in the sidebar and click 'Save Keys'")
             else:
-                os.environ["ANTHROPIC_API_KEY"] = final_anthropic
-                os.environ["GEMINI_API_KEY"] = final_gemini
-                if final_removebg:
-                    os.environ["REMOVE_BG_API_KEY"] = final_removebg
-                
+                # Prepare API keys dict
+                api_keys = {
+                    'anthropic': final_anthropic,
+                    'gemini': final_gemini,
+                    'removebg': final_removebg
+                }
+
+                # Configure retry behavior
+                os.environ["SKIP_RETRIES"] = "true" if skip_retries else "false"
+
+                # Configure background removal method
+                if remove_background:
+                    if bg_method == "Auto (Smart Selection)":
+                        os.environ["BACKGROUND_REMOVAL_METHOD"] = "auto"
+                        os.environ["REMBG_MODEL"] = rembg_model
+                        os.environ["REMBG_ALPHA_MATTING"] = "true" if use_alpha_matting else "false"
+                    elif bg_method == "rembg (Local)":
+                        os.environ["BACKGROUND_REMOVAL_METHOD"] = "rembg"
+                        os.environ["REMBG_MODEL"] = rembg_model
+                        os.environ["REMBG_ALPHA_MATTING"] = "true" if use_alpha_matting else "false"
+                    else:  # remove.bg (API)
+                        os.environ["BACKGROUND_REMOVAL_METHOD"] = "remove.bg"
+
                 with st.spinner("🔄 Processing your image..."):
                     try:
                         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1052,7 +1070,8 @@ if mode == "🖼️ Single Image":
                                 result = asyncio.run(process_single_image_enhanced(
                                     image_path=process_path,
                                     custom_instructions=final_instructions,
-                                    output_dir=temp_dir
+                                    output_dir=temp_dir,
+                                    api_keys=api_keys
                                 ))
                             
                             if result.get("final_image"):
@@ -1389,11 +1408,29 @@ elif mode == "📦 Batch Processing":
             elif (batch_use_gemini or batch_use_chunked_gemini) and not gemini_key:
                 st.error("⚠️ Please enter your Gemini API key in the sidebar")
             else:
-                os.environ["ANTHROPIC_API_KEY"] = anthropic_key
-                os.environ["GEMINI_API_KEY"] = gemini_key
-                if removebg_key:
-                    os.environ["REMOVE_BG_API_KEY"] = removebg_key
-                
+                # Prepare API keys dict
+                api_keys = {
+                    'anthropic': anthropic_key,
+                    'gemini': gemini_key,
+                    'removebg': removebg_key
+                }
+
+                # Configure retry behavior
+                os.environ["SKIP_RETRIES"] = "true" if skip_retries else "false"
+
+                # Configure background removal method for batch
+                if batch_remove_background:
+                    if batch_bg_method == "Auto (Smart Selection)":
+                        os.environ["BACKGROUND_REMOVAL_METHOD"] = "auto"
+                        os.environ["REMBG_MODEL"] = batch_rembg_model
+                        os.environ["REMBG_ALPHA_MATTING"] = "true" if batch_use_alpha_matting else "false"
+                    elif batch_bg_method == "rembg (Local)":
+                        os.environ["BACKGROUND_REMOVAL_METHOD"] = "rembg"
+                        os.environ["REMBG_MODEL"] = batch_rembg_model
+                        os.environ["REMBG_ALPHA_MATTING"] = "true" if batch_use_alpha_matting else "false"
+                    else:  # remove.bg (API)
+                        os.environ["BACKGROUND_REMOVAL_METHOD"] = "remove.bg"
+
                 st.markdown("---")
                 st.header("⚙️ Processing Images")
                 
@@ -1551,7 +1588,8 @@ elif mode == "📦 Batch Processing":
                             result = await process_single_image_enhanced(
                                 image_path=process_path,
                                 custom_instructions=final_batch_instructions,
-                                output_dir=temp_dir
+                                output_dir=temp_dir,
+                                api_keys=api_keys
                             )
                             
                             if result.get("final_image"):

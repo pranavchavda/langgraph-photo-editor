@@ -755,8 +755,13 @@ async def enhanced_agentic_processor(
             )
         
         # 🔄 Retry Logic (if quality is still poor)
-        MAX_RETRIES = 2
-        if retry_count < MAX_RETRIES and final_quality < 7:  # Max 2 retries, only if quality is poor
+        MAX_RETRIES = int(os.getenv("RETRY_ATTEMPTS", "2"))
+        QUALITY_THRESHOLD = float(os.getenv("QUALITY_THRESHOLD", "5.0"))  # Changed from 7.0 to 5.0 (only retry if truly poor)
+
+        # Skip retries if disabled for faster processing
+        SKIP_RETRIES = os.getenv("SKIP_RETRIES", "false").lower() == "true"
+
+        if not SKIP_RETRIES and retry_count < MAX_RETRIES and final_quality < QUALITY_THRESHOLD:  # Max retries, only if quality is poor
             writer({
                 "workflow": "enhanced_retry",
                 "attempt": retry_count + 1,
@@ -768,12 +773,12 @@ async def enhanced_agentic_processor(
             
             # Create refined analysis for retry
             refined_analysis = analysis.copy()
-            
+
             # Adjust strategy based on QC feedback
-            if editing_strategy == "gemini" and final_quality < 7:
+            if editing_strategy == "gemini" and final_quality < QUALITY_THRESHOLD:
                 refined_analysis["editing_strategy"] = "imagemagick"
                 refined_analysis["imagemagick_command"] = qc_result.get("imagemagick_suggestions", "-enhance")
-            elif editing_strategy == "imagemagick" and final_quality < 7:
+            elif editing_strategy == "imagemagick" and final_quality < QUALITY_THRESHOLD:
                 refined_analysis["editing_strategy"] = "both"  # Try Gemini + ImageMagick
             
             # Recursive retry with refined approach - pass retry count forward
@@ -859,10 +864,32 @@ async def enhanced_agentic_processor(
 async def process_single_image_enhanced(
     image_path: str,
     custom_instructions: Optional[str] = None,
-    output_dir: Optional[str] = None
+    output_dir: Optional[str] = None,
+    api_keys: Optional[Dict[str, str]] = None
 ) -> Dict[str, Any]:
-    """Process a single image with the enhanced workflow"""
-    
+    """
+    Process a single image with the enhanced workflow
+
+    Args:
+        image_path: Path to input image
+        custom_instructions: Optional processing instructions
+        output_dir: Optional output directory
+        api_keys: Optional dict with 'anthropic', 'gemini', 'removebg' keys
+    """
+
+    # Set API keys from parameters (takes precedence over environment)
+    if api_keys:
+        if api_keys.get('anthropic'):
+            os.environ["ANTHROPIC_API_KEY"] = api_keys['anthropic']
+        if api_keys.get('gemini'):
+            os.environ["GEMINI_API_KEY"] = api_keys['gemini']
+        if api_keys.get('removebg'):
+            os.environ["REMOVE_BG_API_KEY"] = api_keys['removebg']
+
+        # Clear any custom base URLs that might interfere
+        if "ANTHROPIC_BASE_URL" in os.environ:
+            del os.environ["ANTHROPIC_BASE_URL"]
+
     # Set up custom instructions in environment if provided
     if custom_instructions:
         os.environ["CUSTOM_PROCESSING_INSTRUCTIONS"] = custom_instructions

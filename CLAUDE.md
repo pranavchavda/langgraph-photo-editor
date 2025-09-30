@@ -468,4 +468,29 @@ pip install pyvips opencv-python
 ### Performance Improvements
 - **Repair**: G'MIC is 3x faster than asking Gemini to remove dust
 - **Export**: libvips is 5-10x faster than ImageMagick for resize/export
-- **Consistency**: Darktable styles are 100% deterministic vs AI variance 
+- **Consistency**: Darktable styles are 100% deterministic vs AI variance
+
+## Future Improvements to Consider
+
+### ImageMagick-Based Defect Repair
+**Rationale**: ImageMagick is already a core dependency and has excellent morphological operations for defect removal
+
+**Potential Implementation**:
+- Use `-morphology Open Octagon:2` for dust removal
+- Use `-median 2x2` for salt-and-pepper noise
+- Use `-despeckle` for general spot removal  
+- Use `-statistic median` for scratch removal (directional)
+- Use `-enhance` and `-noise` for general cleanup
+
+**Benefits**:
+- Always available (core dependency)
+- Faster than G'MIC
+- More reliable than external tools
+- Can work as primary method with OpenCV as fallback
+
+**Suggested Tier System**:
+1. **Tier 1**: ImageMagick morphology (fast, always available)
+2. **Tier 2**: OpenCV inpainting (better for complex repairs)
+3. **Tier 3**: G'MIC (if available, most advanced)
+
+This would reduce dependency on problematic G'MIC while still providing robust defect repair. 

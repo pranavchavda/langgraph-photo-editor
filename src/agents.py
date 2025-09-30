@@ -184,7 +184,7 @@ async def analysis_agent(image_path: str) -> Dict[str, Any]:
             pass  # Ignore JSON parsing errors
 
         response = await client.messages.create(
-            model="claude-sonnet-4-20250514",  # Claude Sonnet 4
+            model="claude-sonnet-4-5-20250929",  # Claude Sonnet 4.5
             max_tokens=1000,
             messages=[{
                 "role": "user",
@@ -481,7 +481,7 @@ async def qc_agent(image_path: str, original_analysis: Dict[str, Any]) -> Dict[s
         """
 
         response = await client.messages.create(
-            model="claude-sonnet-4-20250514",  # Claude Sonnet 4
+            model="claude-sonnet-4-5-20250929",  # Claude Sonnet 4.5
             max_tokens=800,
             messages=[{
                 "role": "user",
