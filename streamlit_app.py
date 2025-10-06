@@ -330,6 +330,12 @@ with st.sidebar:
 
     remove_background = st.checkbox("Remove Background", value=True)
 
+    auto_trim = st.checkbox(
+        "Auto-Trim Excess Whitespace",
+        value=False,
+        help="Automatically remove excess whitespace/borders from the image. Uncheck if you want to preserve the original framing."
+    )
+
     st.subheader("🔄 Quality Control")
     skip_retries = st.checkbox(
         "Skip Quality Retries (Faster Processing)",
@@ -1021,7 +1027,10 @@ if mode == "🖼️ Single Image":
                                     os.environ["SKIP_BACKGROUND_REMOVAL"] = "true"
                                 else:
                                     os.environ["SKIP_BACKGROUND_REMOVAL"] = "false"
-                                
+
+                                # Set auto-trim preference
+                                os.environ["IMAGEMAGICK_TRIM"] = "true" if auto_trim else "false"
+
                                 # Set defect repair flag
                                 if use_defect_repair:
                                     os.environ["USE_DEFECT_REPAIR"] = "true"
@@ -1218,6 +1227,12 @@ elif mode == "📦 Batch Processing":
             batch_use_defect_repair = st.checkbox("Auto Dust & Scratch Repair 🧹", value=False, key="batch_defect",
                                     help="Automatically detect and remove dust spots, sensor debris, and scratches.")
             batch_remove_background = st.checkbox("Remove Background", value=True, key="batch_remove_bg")
+            batch_auto_trim = st.checkbox(
+                "Auto-Trim Excess Whitespace",
+                value=False,
+                key="batch_auto_trim",
+                help="Automatically remove excess whitespace/borders from images. Uncheck to preserve original framing."
+            )
 
             # Show background removal method selection when enabled
             batch_bg_method = "Use sidebar settings"  # Default value
@@ -1551,7 +1566,10 @@ elif mode == "📦 Batch Processing":
                                 else:
                                     print(f"📦 Batch: Using sidebar settings for background removal")
                                 # Otherwise, sidebar settings are already set in os.environ
-                            
+
+                            # Set auto-trim preference for batch
+                            os.environ["IMAGEMAGICK_TRIM"] = "true" if batch_auto_trim else "false"
+
                             # Set defect repair flag
                             if batch_use_defect_repair:
                                 os.environ["USE_DEFECT_REPAIR"] = "true"
@@ -1682,6 +1700,9 @@ elif mode == "📦 Batch Processing":
                             else:
                                 os.environ["SKIP_REPAIR"] = "true"
                             os.environ["SKIP_BACKGROUND_REMOVAL"] = "false" if batch_remove_background else "true"
+
+                            # Set auto-trim preference for batch consistency mode
+                            os.environ["IMAGEMAGICK_TRIM"] = "true" if batch_auto_trim else "false"
 
                             # Set background removal method for batch consistency mode
                             if batch_remove_background and batch_bg_method != "Use sidebar settings":

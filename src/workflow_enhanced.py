@@ -338,9 +338,26 @@ async def enhanced_agentic_processor(
         
         # ✂️ Stage 3: Trimming (if needed - after background removal)
         needs_trim = analysis.get("needs_trim", False)
-        if custom_instructions and "trim" in custom_instructions.lower():
-            needs_trim = True
-            
+
+        # Check if user explicitly disabled trimming via checkbox/environment
+        imagemagick_trim_env = os.getenv("IMAGEMAGICK_TRIM", "").lower()
+        if imagemagick_trim_env == "false":
+            needs_trim = False  # Checkbox overrides AI decision
+        elif imagemagick_trim_env == "true":
+            needs_trim = True  # Checkbox enables trimming
+
+        # Custom instructions can override everything
+        if custom_instructions:
+            instructions_lower = custom_instructions.lower()
+            # Check for negative trim instructions first
+            negative_patterns = ["do not trim", "don't trim", "no trim", "skip trim", "do not crop", "don't crop", "no crop", "skip crop"]
+            has_negative = any(pattern in instructions_lower for pattern in negative_patterns)
+
+            if has_negative:
+                needs_trim = False  # Explicitly disable trimming
+            elif "trim" in instructions_lower or "crop whitespace" in instructions_lower or "remove borders" in instructions_lower:
+                needs_trim = True  # Positive trim instruction
+
         if needs_trim:
             writer({
                 "stage": "trimming",
