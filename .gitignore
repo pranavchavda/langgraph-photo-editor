@@ -1,1 +1,6 @@
 .streamlit/secrets.toml
+.env
+doug/
+__pycache__/
+*.pyc
+test_*.py

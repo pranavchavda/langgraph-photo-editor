@@ -888,6 +888,12 @@ if mode == "🖼️ Single Image":
             final_gemini = st.session_state.api_keys.get('gemini', '')
             final_removebg = st.session_state.api_keys.get('removebg', '')
 
+            # Debug logging
+            print(f"🔍 STREAMLIT DEBUG: Processing started")
+            print(f"   Anthropic key in session: {final_anthropic[:8] if final_anthropic else 'EMPTY'}...")
+            print(f"   Gemini key in session: {final_gemini[:8] if final_gemini else 'EMPTY'}...")
+            print(f"   RemoveBG key in session: {final_removebg[:8] if final_removebg else 'EMPTY'}...")
+
             if not final_anthropic:
                 st.error("⚠️ Please enter your Anthropic API key in the sidebar and click 'Save Keys'")
             elif use_gemini and not final_gemini:
@@ -899,6 +905,7 @@ if mode == "🖼️ Single Image":
                     'gemini': final_gemini,
                     'removebg': final_removebg
                 }
+                print(f"✅ Created api_keys dict with {len([k for k, v in api_keys.items() if v])} non-empty keys")
 
                 # Configure retry behavior
                 os.environ["SKIP_RETRIES"] = "true" if skip_retries else "false"

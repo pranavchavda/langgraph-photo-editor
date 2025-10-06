@@ -878,17 +878,27 @@ async def process_single_image_enhanced(
     """
 
     # Set API keys from parameters (takes precedence over environment)
+    print(f"🔍 DEBUG: Received api_keys parameter: {api_keys is not None}")
     if api_keys:
+        print(f"🔍 DEBUG: api_keys dict keys: {list(api_keys.keys())}")
         if api_keys.get('anthropic'):
             os.environ["ANTHROPIC_API_KEY"] = api_keys['anthropic']
+            print(f"✅ Set ANTHROPIC_API_KEY: {api_keys['anthropic'][:8]}...{api_keys['anthropic'][-4:]}")
+        else:
+            print(f"❌ No anthropic key in api_keys dict!")
         if api_keys.get('gemini'):
             os.environ["GEMINI_API_KEY"] = api_keys['gemini']
+            print(f"✅ Set GEMINI_API_KEY: {api_keys['gemini'][:8]}...{api_keys['gemini'][-4:]}")
         if api_keys.get('removebg'):
             os.environ["REMOVE_BG_API_KEY"] = api_keys['removebg']
+            print(f"✅ Set REMOVE_BG_API_KEY: {api_keys['removebg'][:8]}...")
 
         # Clear any custom base URLs that might interfere
         if "ANTHROPIC_BASE_URL" in os.environ:
             del os.environ["ANTHROPIC_BASE_URL"]
+    else:
+        print(f"⚠️ WARNING: No api_keys provided, using environment variables")
+        print(f"   ANTHROPIC_API_KEY from env: {os.getenv('ANTHROPIC_API_KEY', 'NOT SET')[:8] if os.getenv('ANTHROPIC_API_KEY') else 'NOT SET'}...")
 
     # Set up custom instructions in environment if provided
     if custom_instructions:
