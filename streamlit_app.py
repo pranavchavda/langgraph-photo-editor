@@ -913,6 +913,17 @@ if mode == "🖼️ Single Image":
                 }
                 print(f"✅ Created api_keys dict with {len([k for k, v in api_keys.items() if v])} non-empty keys")
 
+                # Configure LangSmith tracing
+                # Check if LANGSMITH_API_KEY exists in environment or Streamlit secrets
+                langsmith_key = os.getenv("LANGSMITH_API_KEY") or st.secrets.get("LANGSMITH_API_KEY")
+                if langsmith_key:
+                    os.environ["LANGSMITH_API_KEY"] = langsmith_key
+                    os.environ["LANGSMITH_TRACING"] = "true"
+                    os.environ["LANGSMITH_PROJECT"] = "langgraph-photo-editor"
+                    print(f"✅ LangSmith tracing enabled: {langsmith_key[:20]}...")
+                else:
+                    print("ℹ️ LangSmith tracing not configured (no API key found)")
+
                 # Configure retry behavior
                 os.environ["SKIP_RETRIES"] = "true" if skip_retries else "false"
 
@@ -1439,6 +1450,17 @@ elif mode == "📦 Batch Processing":
                     'gemini': gemini_key,
                     'removebg': removebg_key
                 }
+
+                # Configure LangSmith tracing
+                # Check if LANGSMITH_API_KEY exists in environment or Streamlit secrets
+                langsmith_key = os.getenv("LANGSMITH_API_KEY") or st.secrets.get("LANGSMITH_API_KEY")
+                if langsmith_key:
+                    os.environ["LANGSMITH_API_KEY"] = langsmith_key
+                    os.environ["LANGSMITH_TRACING"] = "true"
+                    os.environ["LANGSMITH_PROJECT"] = "langgraph-photo-editor"
+                    print(f"✅ LangSmith tracing enabled (batch): {langsmith_key[:20]}...")
+                else:
+                    print("ℹ️ LangSmith tracing not configured for batch (no API key found)")
 
                 # Configure retry behavior
                 os.environ["SKIP_RETRIES"] = "true" if skip_retries else "false"
