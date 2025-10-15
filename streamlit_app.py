@@ -16,7 +16,21 @@ import zipfile
 import io
 from streamlit_local_storage import LocalStorage
 
-# Import our existing workflow
+# Configure LangSmith tracing BEFORE importing workflow
+# This ensures tracing is enabled when LangGraph initializes
+try:
+    langsmith_key = os.getenv("LANGSMITH_API_KEY") or st.secrets.get("LANGSMITH_API_KEY", None)
+    if langsmith_key:
+        os.environ["LANGSMITH_API_KEY"] = langsmith_key
+        os.environ["LANGSMITH_TRACING"] = "true"
+        os.environ["LANGSMITH_PROJECT"] = "langgraph-photo-editor"
+        print(f"✅ LangSmith tracing configured at startup: {langsmith_key[:20]}...")
+    else:
+        print("ℹ️ LangSmith tracing not configured (no API key found)")
+except Exception as e:
+    print(f"⚠️ LangSmith startup configuration failed: {e}")
+
+# Import our existing workflow (after LangSmith config)
 from src.workflow_enhanced import process_single_image_enhanced
 from src.quality_config import get_quality_settings
 try:
@@ -918,19 +932,7 @@ if mode == "🖼️ Single Image":
                 }
                 print(f"✅ Created api_keys dict with {len([k for k, v in api_keys.items() if v])} non-empty keys")
 
-                # Configure LangSmith tracing
-                # Check if LANGSMITH_API_KEY exists in environment or Streamlit secrets
-                try:
-                    langsmith_key = os.getenv("LANGSMITH_API_KEY") or st.secrets.get("LANGSMITH_API_KEY", None)
-                    if langsmith_key:
-                        os.environ["LANGSMITH_API_KEY"] = langsmith_key
-                        os.environ["LANGSMITH_TRACING"] = "true"
-                        os.environ["LANGSMITH_PROJECT"] = "langgraph-photo-editor"
-                        print(f"✅ LangSmith tracing enabled: {langsmith_key[:20]}...")
-                    else:
-                        print("ℹ️ LangSmith tracing not configured (no API key found)")
-                except Exception as e:
-                    print(f"⚠️ LangSmith configuration failed: {e}")
+                # LangSmith tracing already configured at startup (top of file)
 
                 # Configure retry behavior
                 os.environ["SKIP_RETRIES"] = "true" if skip_retries else "false"
@@ -1464,19 +1466,7 @@ elif mode == "📦 Batch Processing":
                     'removebg': final_removebg
                 }
 
-                # Configure LangSmith tracing
-                # Check if LANGSMITH_API_KEY exists in environment or Streamlit secrets
-                try:
-                    langsmith_key = os.getenv("LANGSMITH_API_KEY") or st.secrets.get("LANGSMITH_API_KEY", None)
-                    if langsmith_key:
-                        os.environ["LANGSMITH_API_KEY"] = langsmith_key
-                        os.environ["LANGSMITH_TRACING"] = "true"
-                        os.environ["LANGSMITH_PROJECT"] = "langgraph-photo-editor"
-                        print(f"✅ LangSmith tracing enabled (batch): {langsmith_key[:20]}...")
-                    else:
-                        print("ℹ️ LangSmith tracing not configured for batch (no API key found)")
-                except Exception as e:
-                    print(f"⚠️ LangSmith configuration failed (batch): {e}")
+                # LangSmith tracing already configured at startup (top of file)
 
                 # Configure retry behavior
                 os.environ["SKIP_RETRIES"] = "true" if skip_retries else "false"
