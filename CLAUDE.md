@@ -118,6 +118,12 @@ python test_trim.py         # Test image processing utilities
 ANTHROPIC_API_KEY=your_claude_key_here        # Claude Sonnet 4.5 (claude-sonnet-4-5-20250929)
 GEMINI_API_KEY=your_gemini_key_here           # Gemini 2.5 Flash
 
+# LangSmith Observability (Optional - for workflow tracing and debugging)
+LANGSMITH_API_KEY=your_langsmith_key_here     # Get from https://smith.langchain.com
+LANGSMITH_TRACING=true                        # Enable tracing (set to false to disable)
+LANGSMITH_PROJECT=langgraph-photo-editor      # Project name in LangSmith UI
+# Optional: LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+
 # Optional services
 REMOVE_BG_API_KEY=your_removebg_key_here      # Background removal (remove.bg API)
 
