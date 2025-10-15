@@ -1445,18 +1445,23 @@ elif mode == "📦 Batch Processing":
         )
         
         process_batch_button = st.button("🚀 Process All Images", type="primary", use_container_width=True)
-        
+
         if process_batch_button:
-            if not anthropic_key:
-                st.error("⚠️ Please enter your Anthropic API key in the sidebar")
-            elif (batch_use_gemini or batch_use_chunked_gemini) and not gemini_key:
-                st.error("⚠️ Please enter your Gemini API key in the sidebar")
+            # Get keys from session state (same as single image mode)
+            batch_anthropic = st.session_state.api_keys.get('anthropic', '')
+            batch_gemini = st.session_state.api_keys.get('gemini', '')
+            batch_removebg = st.session_state.api_keys.get('removebg', '')
+
+            if not batch_anthropic:
+                st.error("⚠️ Please enter your Anthropic API key in the sidebar and click 'Save Keys'")
+            elif (batch_use_gemini or batch_use_chunked_gemini) and not batch_gemini:
+                st.error("⚠️ Please enter your Gemini API key in the sidebar and click 'Save Keys'")
             else:
                 # Prepare API keys dict
                 api_keys = {
-                    'anthropic': anthropic_key,
-                    'gemini': gemini_key,
-                    'removebg': removebg_key
+                    'anthropic': batch_anthropic,
+                    'gemini': batch_gemini,
+                    'removebg': batch_removebg
                 }
 
                 # Configure LangSmith tracing
