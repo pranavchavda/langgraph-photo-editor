@@ -62,7 +62,7 @@ if 'api_keys' not in st.session_state:
     st.session_state.api_keys = {'anthropic': '', 'gemini': '', 'removebg': ''}
 
 # Try to load keys from localStorage (works locally, not on cloud)
-# Fall back to Streamlit secrets if localStorage fails
+# On Streamlit Cloud, localStorage doesn't work, so user must enter keys via UI
 try:
     saved_anthropic = localS.getItem("doug_anthropic_key")
     saved_gemini = localS.getItem("doug_gemini_key")
@@ -77,19 +77,9 @@ try:
     if saved_removebg:
         st.session_state.api_keys['removebg'] = saved_removebg
 except Exception as e:
-    # localStorage doesn't work on Streamlit Cloud, fall back to secrets
-    print(f"⚠️ localStorage not available (likely Streamlit Cloud): {e}")
-    # Try loading from Streamlit secrets instead
-    try:
-        if not st.session_state.api_keys.get('anthropic'):
-            st.session_state.api_keys['anthropic'] = st.secrets.get("ANTHROPIC_API_KEY", "")
-        if not st.session_state.api_keys.get('gemini'):
-            st.session_state.api_keys['gemini'] = st.secrets.get("GEMINI_API_KEY", "")
-        if not st.session_state.api_keys.get('removebg'):
-            st.session_state.api_keys['removebg'] = st.secrets.get("REMOVE_BG_API_KEY", "")
-        print("✅ Loaded API keys from Streamlit secrets")
-    except:
-        print("ℹ️ No secrets found, user will need to enter keys manually")
+    # localStorage doesn't work on Streamlit Cloud - user will enter keys via UI form
+    print(f"ℹ️ localStorage not available (Streamlit Cloud mode): {e}")
+    print("   Users will enter API keys via the UI form")
 
 # Custom CSS
 st.markdown("""
