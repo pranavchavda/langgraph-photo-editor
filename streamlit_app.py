@@ -61,20 +61,35 @@ localS = LocalStorage()
 if 'api_keys' not in st.session_state:
     st.session_state.api_keys = {'anthropic': '', 'gemini': '', 'removebg': ''}
 
-# Load keys from localStorage
-# Note: getItem only takes itemKey parameter
-saved_anthropic = localS.getItem("doug_anthropic_key")
-saved_gemini = localS.getItem("doug_gemini_key")  
-saved_removebg = localS.getItem("doug_removebg_key")
+# Try to load keys from localStorage (works locally, not on cloud)
+# Fall back to Streamlit secrets if localStorage fails
+try:
+    saved_anthropic = localS.getItem("doug_anthropic_key")
+    saved_gemini = localS.getItem("doug_gemini_key")
+    saved_removebg = localS.getItem("doug_removebg_key")
 
-# Update session state if we got values from localStorage
-# Note: Due to component rendering, values might be None on first load
-if saved_anthropic:
-    st.session_state.api_keys['anthropic'] = saved_anthropic
-if saved_gemini:
-    st.session_state.api_keys['gemini'] = saved_gemini
-if saved_removebg:
-    st.session_state.api_keys['removebg'] = saved_removebg
+    # Update session state if we got values from localStorage
+    # Note: Due to component rendering, values might be None on first load
+    if saved_anthropic:
+        st.session_state.api_keys['anthropic'] = saved_anthropic
+    if saved_gemini:
+        st.session_state.api_keys['gemini'] = saved_gemini
+    if saved_removebg:
+        st.session_state.api_keys['removebg'] = saved_removebg
+except Exception as e:
+    # localStorage doesn't work on Streamlit Cloud, fall back to secrets
+    print(f"⚠️ localStorage not available (likely Streamlit Cloud): {e}")
+    # Try loading from Streamlit secrets instead
+    try:
+        if not st.session_state.api_keys.get('anthropic'):
+            st.session_state.api_keys['anthropic'] = st.secrets.get("ANTHROPIC_API_KEY", "")
+        if not st.session_state.api_keys.get('gemini'):
+            st.session_state.api_keys['gemini'] = st.secrets.get("GEMINI_API_KEY", "")
+        if not st.session_state.api_keys.get('removebg'):
+            st.session_state.api_keys['removebg'] = st.secrets.get("REMOVE_BG_API_KEY", "")
+        print("✅ Loaded API keys from Streamlit secrets")
+    except:
+        print("ℹ️ No secrets found, user will need to enter keys manually")
 
 # Custom CSS
 st.markdown("""
@@ -915,14 +930,17 @@ if mode == "🖼️ Single Image":
 
                 # Configure LangSmith tracing
                 # Check if LANGSMITH_API_KEY exists in environment or Streamlit secrets
-                langsmith_key = os.getenv("LANGSMITH_API_KEY") or st.secrets.get("LANGSMITH_API_KEY")
-                if langsmith_key:
-                    os.environ["LANGSMITH_API_KEY"] = langsmith_key
-                    os.environ["LANGSMITH_TRACING"] = "true"
-                    os.environ["LANGSMITH_PROJECT"] = "langgraph-photo-editor"
-                    print(f"✅ LangSmith tracing enabled: {langsmith_key[:20]}...")
-                else:
-                    print("ℹ️ LangSmith tracing not configured (no API key found)")
+                try:
+                    langsmith_key = os.getenv("LANGSMITH_API_KEY") or st.secrets.get("LANGSMITH_API_KEY", None)
+                    if langsmith_key:
+                        os.environ["LANGSMITH_API_KEY"] = langsmith_key
+                        os.environ["LANGSMITH_TRACING"] = "true"
+                        os.environ["LANGSMITH_PROJECT"] = "langgraph-photo-editor"
+                        print(f"✅ LangSmith tracing enabled: {langsmith_key[:20]}...")
+                    else:
+                        print("ℹ️ LangSmith tracing not configured (no API key found)")
+                except Exception as e:
+                    print(f"⚠️ LangSmith configuration failed: {e}")
 
                 # Configure retry behavior
                 os.environ["SKIP_RETRIES"] = "true" if skip_retries else "false"
@@ -1453,14 +1471,17 @@ elif mode == "📦 Batch Processing":
 
                 # Configure LangSmith tracing
                 # Check if LANGSMITH_API_KEY exists in environment or Streamlit secrets
-                langsmith_key = os.getenv("LANGSMITH_API_KEY") or st.secrets.get("LANGSMITH_API_KEY")
-                if langsmith_key:
-                    os.environ["LANGSMITH_API_KEY"] = langsmith_key
-                    os.environ["LANGSMITH_TRACING"] = "true"
-                    os.environ["LANGSMITH_PROJECT"] = "langgraph-photo-editor"
-                    print(f"✅ LangSmith tracing enabled (batch): {langsmith_key[:20]}...")
-                else:
-                    print("ℹ️ LangSmith tracing not configured for batch (no API key found)")
+                try:
+                    langsmith_key = os.getenv("LANGSMITH_API_KEY") or st.secrets.get("LANGSMITH_API_KEY", None)
+                    if langsmith_key:
+                        os.environ["LANGSMITH_API_KEY"] = langsmith_key
+                        os.environ["LANGSMITH_TRACING"] = "true"
+                        os.environ["LANGSMITH_PROJECT"] = "langgraph-photo-editor"
+                        print(f"✅ LangSmith tracing enabled (batch): {langsmith_key[:20]}...")
+                    else:
+                        print("ℹ️ LangSmith tracing not configured for batch (no API key found)")
+                except Exception as e:
+                    print(f"⚠️ LangSmith configuration failed (batch): {e}")
 
                 # Configure retry behavior
                 os.environ["SKIP_RETRIES"] = "true" if skip_retries else "false"
