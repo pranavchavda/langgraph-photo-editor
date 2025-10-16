@@ -612,7 +612,7 @@ async def enhanced_analysis_agent(image_path: str, custom_instructions: Optional
         print(f"🌐 Connecting to Anthropic API...")
 
         response = await client.messages.create(
-            model="claude-sonnet-4-5-20250929",
+            model="claude-haiku-4-5-20251001",
             max_tokens=1200,
             temperature=0.7,
             messages=[{
@@ -1757,7 +1757,7 @@ async def enhanced_qc_agent(image_path: str, original_analysis: Dict[str, Any]) 
     try:
         client = get_anthropic_client()
         response = await client.messages.create(
-            model="claude-sonnet-4-5-20250929",
+            model="claude-haiku-4-5-20251001",
             max_tokens=800,
             messages=[{
                 "role": "user",
