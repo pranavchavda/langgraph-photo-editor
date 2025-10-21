@@ -895,26 +895,39 @@ async def process_single_image_enhanced(
     """
 
     # Set API keys from parameters (takes precedence over environment)
-    print(f"🔍 DEBUG: Received api_keys parameter: {api_keys is not None}")
-    if api_keys:
+    print(f"🔍 DEBUG: Received api_keys parameter type: {type(api_keys)}, value: {api_keys is not None}")
+    if api_keys is not None and isinstance(api_keys, dict):
         print(f"🔍 DEBUG: api_keys dict keys: {list(api_keys.keys())}")
+        print(f"🔍 DEBUG: api_keys dict values (masked): {[(k, v[:8] + '...' if v else 'EMPTY') for k, v in api_keys.items()]}")
+
         if api_keys.get('anthropic'):
             os.environ["ANTHROPIC_API_KEY"] = api_keys['anthropic']
-            print(f"✅ Set ANTHROPIC_API_KEY: {api_keys['anthropic'][:8]}...{api_keys['anthropic'][-4:]}")
+            print(f"✅ Set ANTHROPIC_API_KEY from UI: {api_keys['anthropic'][:8]}...{api_keys['anthropic'][-4:]}")
         else:
-            print(f"❌ No anthropic key in api_keys dict!")
+            print(f"⚠️ No anthropic key in api_keys dict (value is empty or missing)")
+
         if api_keys.get('gemini'):
             os.environ["GEMINI_API_KEY"] = api_keys['gemini']
-            print(f"✅ Set GEMINI_API_KEY: {api_keys['gemini'][:8]}...{api_keys['gemini'][-4:]}")
+            print(f"✅ Set GEMINI_API_KEY from UI: {api_keys['gemini'][:8]}...{api_keys['gemini'][-4:]}")
+        else:
+            print(f"⚠️ No gemini key in api_keys dict (may be OK if not using Gemini)")
+
         if api_keys.get('removebg'):
             os.environ["REMOVE_BG_API_KEY"] = api_keys['removebg']
-            print(f"✅ Set REMOVE_BG_API_KEY: {api_keys['removebg'][:8]}...")
+            print(f"✅ Set REMOVE_BG_API_KEY from UI: {api_keys['removebg'][:8]}...")
+        else:
+            print(f"⚠️ No removebg key in api_keys dict (may be OK if using rembg)")
 
-        # Clear any custom base URLs that might interfere
-        if "ANTHROPIC_BASE_URL" in os.environ:
-            del os.environ["ANTHROPIC_BASE_URL"]
+        # Clear any custom base URLs that might interfere (including empty strings)
+        base_url = os.getenv("ANTHROPIC_BASE_URL")
+        if base_url is not None:
+            if base_url == "":
+                print(f"🧹 Removing empty ANTHROPIC_BASE_URL (empty string causes protocol errors)")
+            else:
+                print(f"🧹 Clearing ANTHROPIC_BASE_URL from environment (was: '{base_url}')")
+            os.environ.pop("ANTHROPIC_BASE_URL", None)
     else:
-        print(f"⚠️ WARNING: No api_keys provided, using environment variables")
+        print(f"⚠️ WARNING: No api_keys provided (api_keys is None or not a dict), falling back to environment variables")
         print(f"   ANTHROPIC_API_KEY from env: {os.getenv('ANTHROPIC_API_KEY', 'NOT SET')[:8] if os.getenv('ANTHROPIC_API_KEY') else 'NOT SET'}...")
 
     # Set up custom instructions in environment if provided
@@ -968,9 +981,20 @@ async def process_image_batch_enhanced(
     max_concurrent: int = 3,
     custom_instructions: Optional[str] = None,
     pattern: str = "*.{jpg,jpeg,png,webp,avif}",
-    use_batch_consistency: bool = True
+    use_batch_consistency: bool = True,
+    api_keys: Optional[Dict[str, str]] = None
 ) -> Dict[str, Any]:
-    """Process multiple images with the enhanced workflow and optional batch consistency"""
+    """Process multiple images with the enhanced workflow and optional batch consistency
+
+    Args:
+        input_dir: Input directory containing images
+        output_dir: Optional output directory
+        max_concurrent: Maximum concurrent processing tasks
+        custom_instructions: Optional processing instructions
+        pattern: File pattern to match
+        use_batch_consistency: Enable batch consistency mode
+        api_keys: Optional dict with 'anthropic', 'gemini', 'removebg' keys
+    """
     
     input_path = Path(input_dir)
     if not input_path.exists():
@@ -993,18 +1017,20 @@ async def process_image_batch_enhanced(
             [str(img) for img in image_files],
             custom_instructions,
             output_dir,
-            max_concurrent
+            max_concurrent,
+            api_keys=api_keys
         )
     
     # Process images with concurrency control (original method)
     semaphore = asyncio.Semaphore(max_concurrent)
-    
+
     async def process_single(image_path):
         async with semaphore:
             return await process_single_image_enhanced(
-                str(image_path), 
+                str(image_path),
                 custom_instructions,
-                output_dir
+                output_dir,
+                api_keys=api_keys
             )
     
     # Execute batch processing

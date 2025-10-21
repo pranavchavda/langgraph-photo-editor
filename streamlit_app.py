@@ -16,6 +16,12 @@ import zipfile
 import io
 from streamlit_local_storage import LocalStorage
 
+# Clear any invalid base URLs FIRST (before importing anything)
+# Empty ANTHROPIC_BASE_URL causes "Request URL is missing protocol" errors
+if os.getenv("ANTHROPIC_BASE_URL") == "":
+    print("🧹 Removing empty ANTHROPIC_BASE_URL from environment (causes protocol errors)")
+    os.environ.pop("ANTHROPIC_BASE_URL", None)
+
 # Configure LangSmith tracing BEFORE importing workflow
 # This ensures tracing is enabled when LangGraph initializes
 try:
@@ -1764,7 +1770,8 @@ elif mode == "📦 Batch Processing":
                                 corrected_paths,
                                 final_batch_instructions,
                                 temp_dir,
-                                max_concurrent
+                                max_concurrent,
+                                api_keys=api_keys
                             )
                             
                             # Convert results to expected format

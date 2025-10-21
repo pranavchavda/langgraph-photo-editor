@@ -295,10 +295,18 @@ async def process_batch_with_consistency(
     image_paths: List[str],
     custom_instructions: Optional[str] = None,
     output_dir: Optional[str] = None,
-    max_concurrent: int = 3
+    max_concurrent: int = 3,
+    api_keys: Optional[Dict[str, str]] = None
 ) -> Dict[str, Any]:
     """
     Process batch with consistency analysis first
+
+    Args:
+        image_paths: List of image file paths
+        custom_instructions: Optional processing instructions
+        output_dir: Optional output directory
+        max_concurrent: Maximum concurrent processing tasks
+        api_keys: Optional dict with 'anthropic', 'gemini', 'removebg' keys
     """
     from .workflow_enhanced import process_single_image_enhanced
 
@@ -327,7 +335,8 @@ async def process_batch_with_consistency(
                 result = await process_single_image_enhanced(
                     image_path,
                     custom_instructions,
-                    output_dir
+                    output_dir,
+                    api_keys=api_keys
                 )
                 result['batch_consistent'] = True
                 return result
