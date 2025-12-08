@@ -12,7 +12,7 @@ import tempfile
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 
-import google.generativeai as genai
+import google.generativeai as genai_legacy  # Legacy SDK for Gemini 2.5 Flash
 from anthropic import AsyncAnthropic
 import requests
 from langgraph.config import get_stream_writer
@@ -33,10 +33,10 @@ def get_anthropic_client():
     return anthropic_client
 
 def configure_gemini():
-    """Configure Gemini with current API key"""
+    """Configure Gemini with current API key (legacy SDK for 2.5 Flash)"""
     api_key = os.getenv("GEMINI_API_KEY")
     if api_key:
-        genai.configure(api_key=api_key)
+        genai_legacy.configure(api_key=api_key)
     else:
         raise AgentError("GEMINI_API_KEY not set")
 
@@ -839,8 +839,8 @@ async def gemini_edit_agent(image_path: str, analysis: Dict[str, Any]) -> str:
         if "gemini-3-pro" in gemini_model:
             print(f"📐 Image size: {gemini_image_size}")
 
-        # Configure Gemini model
-        model = genai.GenerativeModel(gemini_model)
+        # Configure Gemini model (using legacy SDK)
+        model = genai_legacy.GenerativeModel(gemini_model)
         
         # Load image (now potentially flattened)
         print(f"📁 Loading image: {Path(working_image_path).name}")
