@@ -18,7 +18,8 @@ This is an AI-powered agentic photo editor that combines Claude Sonnet 4.5 visio
 **Core Technologies:**
 - LangGraph with functional API (`@task` decorators, `@entrypoint` orchestrator)
 - Claude Sonnet 4.5 (`claude-sonnet-4-5-20250929`) for vision analysis and quality control
-- Gemini 2.5 Flash for AI-powered image editing
+- Gemini 2.5 Flash for AI-powered image editing (fast, cost-effective)
+- Nano Banana Pro (Gemini 3 Pro Image) for high-quality 2K/4K image editing (optional)
 - ImageMagick for traditional photo optimization
 - rembg for free local background removal (no API needed)
 - Rich terminal UI for progress tracking
@@ -116,7 +117,17 @@ python test_trim.py         # Test image processing utilities
 ```bash
 # Core AI APIs
 ANTHROPIC_API_KEY=your_claude_key_here        # Claude Sonnet 4.5 (claude-sonnet-4-5-20250929)
-GEMINI_API_KEY=your_gemini_key_here           # Gemini 2.5 Flash
+GEMINI_API_KEY=your_gemini_key_here           # Gemini API (supports multiple models)
+
+# Gemini Model Selection
+GEMINI_MODEL=gemini-2.5-flash-image-preview   # Options:
+                                              # - gemini-2.5-flash-image-preview (default, $0.039/image)
+                                              # - gemini-3-pro-image-preview (Nano Banana Pro, $0.139-0.24/image)
+
+GEMINI_IMAGE_SIZE=1K                          # Output resolution for Nano Banana Pro only:
+                                              # - 1K: 1080p output
+                                              # - 2K: 2K output (recommended for Nano Banana Pro)
+                                              # - 4K: 4K output (highest quality, $0.24/image)
 
 # LangSmith Observability (Optional - for workflow tracing and debugging)
 LANGSMITH_API_KEY=your_langsmith_key_here     # Get from https://smith.langchain.com
@@ -308,7 +319,7 @@ IMAGEMAGICK_QUALITY=95                        # Output quality (1-100)
 - `langgraph>=0.2.0` - Multi-agent workflow orchestration
 - `langchain-anthropic>=0.2.0` - Claude integration
 - `anthropic>=0.34.0` - Direct Claude API access
-- `google-generativeai>=0.8.0` - Gemini 2.5 Flash image editing
+- `google-generativeai>=0.8.0` - Gemini image editing (2.5 Flash & Nano Banana Pro)
 - `click>=8.0.0` - CLI framework
 - `rich>=13.0.0` - Terminal UI and progress display
 - `pillow>=10.0.0` - Image format handling
@@ -345,6 +356,15 @@ IMAGEMAGICK_QUALITY=95                        # Output quality (1-100)
 - `INSTALL.md` - User-friendly installation guide
 
 ## Recent Improvements (Latest)
+
+**Nano Banana Pro Support (December 2025):**
+- ✅ **Gemini 3 Pro Image (Nano Banana Pro)**: Added support for Google's latest image generation model
+  - Native 2K and 4K output resolution support
+  - Better text rendering and complex compositions
+  - Configurable via `GEMINI_MODEL` and `GEMINI_IMAGE_SIZE` environment variables
+- ✅ **Streamlit UI model selector**: Choose between Gemini 2.5 Flash (fast/cheap) and Nano Banana Pro (high quality)
+- ✅ **Resolution selector for Nano Banana Pro**: Choose 1K, 2K, or 4K output resolution in the UI
+- ✅ **Pricing transparency**: Model costs displayed in UI ($0.039 for Flash, $0.139-0.24 for Nano Banana Pro)
 
 **Claude Sonnet 4.5 Upgrade & Background Removal Enhancements (September 30, 2025):**
 - ✅ **Claude Sonnet 4.5 upgrade**: Upgraded from Sonnet 4 to Sonnet 4.5 (`claude-sonnet-4-5-20250929`) - same model as Claude Code

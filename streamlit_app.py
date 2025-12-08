@@ -303,14 +303,51 @@ with st.sidebar:
     st.subheader("Processing Options")
     use_imagemagick = st.checkbox("Use ImageMagick Optimization", value=True,
                                  help="Traditional image processing for sharpening, color correction, and optimization. Disable to skip.")
-    use_gemini = st.checkbox("Use Gemini AI Enhancement", value=False, 
+    use_gemini = st.checkbox("Use Gemini AI Enhancement", value=False,
                             help="Enable for AI-powered editing (lower resolution). Disable for traditional high-resolution processing.")
-    
+
+    # Gemini model selection (only shows when Gemini is enabled)
+    gemini_model = "gemini-2.5-flash-image-preview"
+    gemini_image_size = "1K"
+    if use_gemini:
+        gemini_model = st.selectbox(
+            "Gemini Model",
+            options=[
+                "gemini-2.5-flash-image-preview",
+                "gemini-3-pro-image-preview"
+            ],
+            index=0,
+            format_func=lambda x: "Gemini 2.5 Flash ($0.039/image)" if "2.5-flash" in x else "Nano Banana Pro ($0.139-0.24/image, 2K/4K)",
+            help="""
+            **Gemini 2.5 Flash** (default): Fast and cost-effective, 1024x1024 output
+
+            **Nano Banana Pro** (Gemini 3 Pro Image): Higher quality with native 2K/4K support
+            - Better text rendering and complex compositions
+            - More expensive but superior results
+            """
+        )
+        os.environ["GEMINI_MODEL"] = gemini_model
+
+        # Show image size option for Nano Banana Pro
+        if "gemini-3-pro" in gemini_model:
+            gemini_image_size = st.selectbox(
+                "Output Resolution",
+                options=["1K", "2K", "4K"],
+                index=1,  # Default to 2K for Nano Banana Pro
+                help="""
+                **1K**: 1080p output (~$0.139/image)
+                **2K**: 2K output (~$0.139/image)
+                **4K**: 4K output (~$0.24/image)
+                """
+            )
+            os.environ["GEMINI_IMAGE_SIZE"] = gemini_image_size
+            st.info(f"🍌 Nano Banana Pro selected with {gemini_image_size} output")
+
     # AI Upscaling option (only shows when using regular Gemini)
     use_ai_upscaling = False
     if use_gemini:
         use_ai_upscaling = st.checkbox(
-            "🚀 Use Google AI Upscaling (Experimental)", 
+            "🚀 Use Google AI Upscaling (Experimental)",
             value=False,
             help="Experimental: Use Google AI to upscale images. Enhanced Lanczos (default) often provides better quality for product photos."
         )

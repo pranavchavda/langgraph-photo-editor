@@ -757,14 +757,27 @@ async def enhanced_analysis_agent(image_path: str, custom_instructions: Optional
 
 async def gemini_edit_agent(image_path: str, analysis: Dict[str, Any]) -> str:
     """
-    🎨 Gemini Edit Agent - Uses Gemini 2.5 Flash Image for advanced editing
+    🎨 Gemini Edit Agent - Uses Gemini 2.5 Flash Image or Gemini 3 Pro Image (Nano Banana Pro) for advanced editing
+
+    Supports two models via GEMINI_MODEL environment variable:
+    - "gemini-2.5-flash-image-preview" (default): Fast, cost-effective editing
+    - "gemini-3-pro-image-preview" (Nano Banana Pro): Higher quality, supports 2K/4K output
     """
     writer = get_stream_writer()
-    
+
+    # Get model configuration
+    gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-image-preview")
+    gemini_image_size = os.getenv("GEMINI_IMAGE_SIZE", "1K")  # 1K, 2K, or 4K (for Nano Banana Pro)
+
+    # Determine model display name
+    model_display_name = "Gemini 2.5 Flash Image"
+    if "gemini-3-pro" in gemini_model:
+        model_display_name = "Nano Banana Pro (Gemini 3 Pro Image)"
+
     writer({
         "agent": "gemini_edit",
-        "status": "editing", 
-        "message": f"Applying AI-powered editing with Gemini 2.5 Flash Image"
+        "status": "editing",
+        "message": f"Applying AI-powered editing with {model_display_name}"
     })
     
     gemini_instructions = analysis.get("gemini_instructions", "")
@@ -822,9 +835,12 @@ async def gemini_edit_agent(image_path: str, analysis: Dict[str, Any]) -> str:
         # Configure Gemini API
         configure_gemini()
         print(f"🌐 Connecting to Gemini API...")
+        print(f"🤖 Using model: {gemini_model}")
+        if "gemini-3-pro" in gemini_model:
+            print(f"📐 Image size: {gemini_image_size}")
 
         # Configure Gemini model
-        model = genai.GenerativeModel('gemini-2.5-flash-image-preview')
+        model = genai.GenerativeModel(gemini_model)
         
         # Load image (now potentially flattened)
         print(f"📁 Loading image: {Path(working_image_path).name}")
@@ -873,15 +889,38 @@ async def gemini_edit_agent(image_path: str, analysis: Dict[str, Any]) -> str:
         REMINDER: Return the FULL, UNCROPPED image with identical dimensions to the input.
         """
         
-        print("🚀 Sending to Gemini 2.5 Flash Image Preview...")
+        print(f"🚀 Sending to {model_display_name}...")
         # Send to Gemini for editing (use working_image_path for correct mime type)
-        response = model.generate_content([
-            edit_prompt,
-            {
-                "mime_type": get_image_media_type(working_image_path),
-                "data": image_data
-            }
-        ])
+        # For Nano Banana Pro (gemini-3-pro-image-preview), we can request higher resolution output
+        if "gemini-3-pro" in gemini_model and gemini_image_size in ["2K", "4K"]:
+            # Use generation config for Nano Banana Pro with higher resolution
+            from google.generativeai import types
+            generation_config = types.GenerateContentConfig(
+                response_modalities=['TEXT', 'IMAGE'],
+                image_config=types.ImageConfig(
+                    image_size=gemini_image_size  # "1K", "2K", or "4K"
+                )
+            )
+            response = model.generate_content(
+                [
+                    edit_prompt,
+                    {
+                        "mime_type": get_image_media_type(working_image_path),
+                        "data": image_data
+                    }
+                ],
+                generation_config=generation_config
+            )
+            print(f"📐 Requested {gemini_image_size} output from Nano Banana Pro")
+        else:
+            # Standard call for Gemini 2.5 Flash or 1K output
+            response = model.generate_content([
+                edit_prompt,
+                {
+                    "mime_type": get_image_media_type(working_image_path),
+                    "data": image_data
+                }
+            ])
         
         print("DEBUG: Received response from Gemini")
         print(f"DEBUG: Response type: {type(response)}")
