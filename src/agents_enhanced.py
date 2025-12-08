@@ -891,29 +891,81 @@ async def gemini_edit_agent(image_path: str, analysis: Dict[str, Any]) -> str:
         
         print(f"🚀 Sending to {model_display_name}...")
         # Send to Gemini for editing (use working_image_path for correct mime type)
-        # For Nano Banana Pro (gemini-3-pro-image-preview), we can request higher resolution output
-        if "gemini-3-pro" in gemini_model and gemini_image_size in ["2K", "4K"]:
-            # Use generation config for Nano Banana Pro with higher resolution
-            from google.generativeai import types
-            generation_config = types.GenerateContentConfig(
-                response_modalities=['TEXT', 'IMAGE'],
-                image_config=types.ImageConfig(
-                    image_size=gemini_image_size  # "1K", "2K", or "4K"
+        # For Nano Banana Pro (gemini-3-pro-image-preview), we need to use the new google.genai SDK
+        if "gemini-3-pro" in gemini_model:
+            # Use new google.genai SDK for Nano Banana Pro
+            try:
+                from google import genai
+                from google.genai import types as genai_types
+
+                # Create client with API key
+                client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+
+                # Build the content with image
+                image_part = genai_types.Part.from_bytes(
+                    data=image_data,
+                    mime_type=get_image_media_type(working_image_path)
                 )
-            )
-            response = model.generate_content(
-                [
-                    edit_prompt,
-                    {
-                        "mime_type": get_image_media_type(working_image_path),
-                        "data": image_data
-                    }
-                ],
-                generation_config=generation_config
-            )
-            print(f"📐 Requested {gemini_image_size} output from Nano Banana Pro")
-        else:
-            # Standard call for Gemini 2.5 Flash or 1K output
+
+                # Configure for image generation with specified size
+                config = genai_types.GenerateContentConfig(
+                    response_modalities=['TEXT', 'IMAGE'],
+                    image_config=genai_types.ImageConfig(
+                        image_size=gemini_image_size  # "1K", "2K", or "4K"
+                    )
+                )
+
+                response = client.models.generate_content(
+                    model=gemini_model,
+                    contents=[edit_prompt, image_part],
+                    config=config
+                )
+                print(f"📐 Requested {gemini_image_size} output from Nano Banana Pro")
+
+                # Extract image from new SDK response format
+                image_saved = False
+                output_path = str(Path(image_path).parent / f"{Path(image_path).stem}-gemini-edited.webp")
+
+                for part in response.candidates[0].content.parts:
+                    if hasattr(part, 'inline_data') and part.inline_data:
+                        print(f"✅ Found edited image ({part.inline_data.mime_type}, {len(part.inline_data.data)} bytes)")
+
+                        from PIL import Image
+                        import io
+                        img = Image.open(io.BytesIO(part.inline_data.data))
+                        edited_width, edited_height = img.size
+
+                        original_img = Image.open(image_path)
+                        original_width, original_height = original_img.size
+
+                        print(f"📐 Nano Banana Pro output: {edited_width}x{edited_height}, Original: {original_width}x{original_height}")
+
+                        # Save the image
+                        quality_settings = get_quality_settings()
+                        save_with_quality(img, output_path, source_format='WEBP', settings=quality_settings)
+
+                        if os.path.getsize(output_path) > 0:
+                            print(f"✅ Saved Nano Banana Pro output to: {Path(output_path).name}")
+                            image_saved = True
+
+                            writer({
+                                "agent": "gemini_edit",
+                                "status": "complete",
+                                "output": output_path,
+                                "message": f"Nano Banana Pro editing complete ({gemini_image_size}): {Path(output_path).name}"
+                            })
+                            return output_path
+
+                if not image_saved:
+                    raise AgentError("No edited image received from Nano Banana Pro")
+
+            except ImportError:
+                print("⚠️ google-genai SDK not installed, falling back to standard SDK")
+                # Fall through to standard SDK below
+                gemini_model = "gemini-2.5-flash-image-preview"
+
+        # Standard call for Gemini 2.5 Flash (or fallback)
+        if "gemini-2.5-flash" in gemini_model or "gemini-3-pro" not in gemini_model:
             response = model.generate_content([
                 edit_prompt,
                 {
