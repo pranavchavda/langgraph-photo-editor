@@ -897,15 +897,14 @@ async def gemini_edit_agent(image_path: str, analysis: Dict[str, Any]) -> str:
             try:
                 from google import genai
                 from google.genai import types as genai_types
+                from PIL import Image as PILImage
 
                 # Create client with API key
                 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
-                # Build the content with image
-                image_part = genai_types.Part.from_bytes(
-                    data=image_data,
-                    mime_type=get_image_media_type(working_image_path)
-                )
+                # Load image as PIL Image (the new SDK handles this natively)
+                input_image = PILImage.open(working_image_path)
+                print(f"📁 Loaded image for Nano Banana Pro: {input_image.size}")
 
                 # Configure for image generation with specified size
                 config = genai_types.GenerateContentConfig(
@@ -917,7 +916,7 @@ async def gemini_edit_agent(image_path: str, analysis: Dict[str, Any]) -> str:
 
                 response = client.models.generate_content(
                     model=gemini_model,
-                    contents=[edit_prompt, image_part],
+                    contents=[edit_prompt, input_image],
                     config=config
                 )
                 print(f"📐 Requested {gemini_image_size} output from Nano Banana Pro")
