@@ -29,7 +29,7 @@ This is an AI-powered agentic photo editor that combines Claude Sonnet 4.5 visio
 ### Deployment on Streamlit Cloud
 The app is designed to be deployed on Streamlit Cloud as an alternative to the desktop Electron app:
 
-**URL**: Deploy to `https://[your-app-name].streamlit.app`
+**Live URL**: https://dougsphotoeditor.streamlit.app/
 
 **Features:**
 - Single-page app with mode toggle (Single Image / Batch Processing)
